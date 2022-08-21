@@ -1,0 +1,955 @@
+                        .module mzl05.c
+                        .area text(rom, con, rel)
+ 0000                   .dbfile E:\avr\iccavrproject\电池容量测试\mzl05.c
+ 0000                   .dbfunc e LCD_DataWrite _LCD_DataWrite fV
+ 0000           ;            Num -> R20
+ 0000           ;            Dat -> R16
+                        .even
+ 0000           _LCD_DataWrite::
+ 0000 0E940000          xcall push_gset1
+ 0004                   .dbline -1
+ 0004                   .dbline 98
+ 0004           ; /////////////////////////////////////////////////////////////////////////
+ 0004           ; ////                           mzl05.c                           ////
+ 0004           ; ////                                                                 ////
+ 0004           ; ////                                                                 ////
+ 0004           ; //// LCD Pin connections:  PORTA                                     ////
+ 0004           ; //// (These can be changed as needed in the following defines).      ////
+ 0004           ; ////  * 0: SDI                                                        ////
+ 0004           ; ////  * 1: SCK                                                        ////
+ 0004           ; ////  * 2: A0                                                         ////
+ 0004           ; ////  * 3: RS                                                        ////
+ 0004           ; ////  * 4: CS1                                                       ////
+ 0004           ; ////  DATA PORTA                                                     ////
+ 0004           ; /////////////////////////////////////////////////////////////////////////
+ 0004           ; ////     面向正面gnd|VCC|SDI|SCK|A0|RES|CS1,CS1标的1脚                                                            ////
+ 0004           ; ////  glcd_init(mode)                                                ////
+ 0004           ; ////     * Must be called before any other function.                 ////
+ 0004           ; ////       - mode can be ON or OFF to turn the LCD on or off         ////
+ 0004           ; ////                                                                 ////
+ 0004           ; ////  glcd_pixel(x,y,color)                                          ////
+ 0004           ; ////     * Sets the pixel to the given color.                        ////
+ 0004           ; ////       - color can be ON or OFF                                  ////
+ 0004           ; ////                                                                 ////
+ 0004           ; ////  glcd_fillScreen(color)                                         ////
+ 0004           ; ////     * Fills the entire LCD with the given color.                ////
+ 0004           ; ////       - color can be ON or OFF                                  ////
+ 0004           ; ////                                                                 ////
+ 0004           ; ////  glcd_update()                                                  ////
+ 0004           ; ////     * Write the display data stored in RAM to the LCD           ////
+ 0004           ; ////     * Only available if FAST_GLCD is defined                    ////
+ 0004           ; ////                                                                 ////
+ 0004           ; /////////////////////////////////////////////////////////////////////////
+ 0004           ; ////        (C) Copyright 1996, 2004 Custom Computer Services        ////
+ 0004           ; //// This source code may only be used by licensed users of the CCS  ////
+ 0004           ; //// C compiler.  This source code may only be distributed to other  ////
+ 0004           ; //// licensed users of the CCS C compiler.  No other use,            ////
+ 0004           ; //// reproduction or distribution is permitted without written       ////
+ 0004           ; //// permission.  Derivative programs created using this software    ////
+ 0004           ; //// in object code form are not restricted in any way.              ////
+ 0004           ; /////////////////////////////////////////////////////////////////////////
+ 0004           ; #include <iom16v.h>
+ 0004           ; #include "mzl05.h"
+ 0004           ; 
+ 0004           ; char glcdhalf;
+ 0004           ; 
+ 0004           ; /*  lcd port define: connect to PORTA of MEGA16 */
+ 0004           ; #define       SDI      0   
+ 0004           ; #define       SCK      1
+ 0004           ; #define       A0       2
+ 0004           ; #define       RES      3
+ 0004           ; #define       CS1      4
+ 0004           ; #define LCD_PORT PORTC
+ 0004           ; 
+ 0004           ; /******************************************************************** */
+ 0004           ; 
+ 0004           ; #define SDI_H SETBIT(LCD_PORT,SDI)
+ 0004           ; #define SDI_L CLRBIT(LCD_PORT,SDI)
+ 0004           ; #define SCK_H SETBIT(LCD_PORT,SCK)    
+ 0004           ; #define SCK_L CLRBIT(LCD_PORT,SCK)   
+ 0004           ; #define A0_H SETBIT(LCD_PORT,A0)
+ 0004           ; #define A0_L CLRBIT(LCD_PORT,A0)
+ 0004           ; #define RES_H SETBIT(LCD_PORT,RES)
+ 0004           ; #define RES_L CLRBIT(LCD_PORT,RES)
+ 0004           ; #define CS1_H SETBIT(LCD_PORT,CS1)
+ 0004           ; #define CS1_L CLRBIT(LCD_PORT,CS1)
+ 0004           ; 
+ 0004           ; #ifndef GLCD_WIDTH
+ 0004           ; #define GLCD_WIDTH   128
+ 0004           ; #endif
+ 0004           ; 
+ 0004           ; #ifndef GLCD_HEIGHT
+ 0004           ; #define GLCD_HEIGHT      64
+ 0004           ; #endif
+ 0004           ; 
+ 0004           ; #ifndef ON
+ 0004           ; #define ON           1
+ 0004           ; #endif
+ 0004           ; 
+ 0004           ; #ifndef OFF
+ 0004           ; #define OFF          0
+ 0004           ; #endif
+ 0004           ; 
+ 0004           ; //////////////////////////////////////////////////////////////////////
+ 0004           ; 
+ 0004           ; 
+ 0004           ; char LCD_Buffer[128][4];
+ 0004           ; 
+ 0004           ; 
+ 0004           ; //========================================================================
+ 0004           ; // 函数: void LCD_DataWrite(unsigned int Data)
+ 0004           ; // 描述: 写一个字节的显示数据至LCD中的显示缓冲RAM当中
+ 0004           ; // 参数: Data 写入的数据 
+ 0004           ; // 返回: 无
+ 0004           ; // 备注: 无
+ 0004           ; // 版本:
+ 0004           ; //      2007/01/09      First version
+ 0004           ; //========================================================================
+ 0004           ; void LCD_DataWrite(char Dat)//,_Fill_Dot_LCD
+ 0004           ; {
+ 0004                   .dbline 100
+ 0004           ;    char Num;
+ 0004           ;    CS1_L;
+ 0004 AC98              cbi 0x15,4
+ 0006                   .dbline 101
+ 0006           ;    A0_H;
+ 0006 AA9A              sbi 0x15,2
+ 0008                   .dbline 102
+ 0008           ;    for(Num=0;Num<8;Num++)
+ 0008 4427              clr R20
+ 000A 09C0              xjmp L5
+ 000C           L2:
+ 000C                   .dbline 103
+ 000C           ;    {
+ 000C                   .dbline 104
+ 000C           ;       if((Dat&0x80) == 0)   SDI_L;
+ 000C 07FD              sbrc R16,7
+ 000E 02C0              rjmp L6
+ 0010                   .dbline 104
+ 0010 A898              cbi 0x15,0
+ 0012 01C0              xjmp L7
+ 0014           L6:
+ 0014                   .dbline 105
+ 0014           ;       else SDI_H;
+ 0014 A89A              sbi 0x15,0
+ 0016           L7:
+ 0016                   .dbline 106
+ 0016 000F              lsl R16
+ 0018                   .dbline 107
+ 0018 A998              cbi 0x15,1
+ 001A                   .dbline 108
+ 001A A99A              sbi 0x15,1
+ 001C                   .dbline 109
+ 001C           L3:
+ 001C                   .dbline 102
+ 001C 4395              inc R20
+ 001E           L5:
+ 001E                   .dbline 102
+ 001E 4830              cpi R20,8
+ 0020 A8F3              brlo L2
+ 0022                   .dbline -2
+ 0022           L1:
+ 0022 0E940000          xcall pop_gset1
+ 0026                   .dbline 0 ; func end
+ 0026 0895              ret
+ 0028                   .dbsym r Num 20 c
+ 0028                   .dbsym r Dat 16 c
+ 0028                   .dbend
+ 0028                   .dbfunc e LCD_RegWrite _LCD_RegWrite fV
+ 0028           ;            Num -> R20
+ 0028           ;        Command -> R16
+                        .even
+ 0028           _LCD_RegWrite::
+ 0028 0E940000          xcall push_gset1
+ 002C                   .dbline -1
+ 002C                   .dbline 121
+ 002C           ;       Dat = Dat << 1;
+ 002C           ;       SCK_L;
+ 002C           ;       SCK_H;
+ 002C           ;    }
+ 002C           ; }
+ 002C           ; //========================================================================
+ 002C           ; // 函数: void LCD_RegWrite(unsigned char Command)
+ 002C           ; // 描述: 写一个字节的数据至LCD中的控制寄存器当中
+ 002C           ; // 参数: Command      写入的数据，低八位有效（byte） 
+ 002C           ; // 返回: 无
+ 002C           ; // 备注: 
+ 002C           ; // 版本:
+ 002C           ; //      2007/01/09      First version
+ 002C           ; //========================================================================
+ 002C           ; void LCD_RegWrite(char Command)
+ 002C           ; {
+ 002C                   .dbline 123
+ 002C           ;    char Num;
+ 002C           ;    CS1_L;
+ 002C AC98              cbi 0x15,4
+ 002E                   .dbline 124
+ 002E           ;    A0_L;
+ 002E AA98              cbi 0x15,2
+ 0030                   .dbline 125
+ 0030           ;    for(Num=0;Num<8;Num++)
+ 0030 4427              clr R20
+ 0032 09C0              xjmp L12
+ 0034           L9:
+ 0034                   .dbline 126
+ 0034           ;    {
+ 0034                   .dbline 127
+ 0034           ;       if((Command&0x80) == 0)   SDI_L;
+ 0034 07FD              sbrc R16,7
+ 0036 02C0              rjmp L13
+ 0038                   .dbline 127
+ 0038 A898              cbi 0x15,0
+ 003A 01C0              xjmp L14
+ 003C           L13:
+ 003C                   .dbline 128
+ 003C           ;       else SDI_H;
+ 003C A89A              sbi 0x15,0
+ 003E           L14:
+ 003E                   .dbline 129
+ 003E 000F              lsl R16
+ 0040                   .dbline 130
+ 0040 A998              cbi 0x15,1
+ 0042                   .dbline 131
+ 0042 A99A              sbi 0x15,1
+ 0044                   .dbline 132
+ 0044           L10:
+ 0044                   .dbline 125
+ 0044 4395              inc R20
+ 0046           L12:
+ 0046                   .dbline 125
+ 0046 4830              cpi R20,8
+ 0048 A8F3              brlo L9
+ 004A                   .dbline -2
+ 004A           L8:
+ 004A 0E940000          xcall pop_gset1
+ 004E                   .dbline 0 ; func end
+ 004E 0895              ret
+ 0050                   .dbsym r Num 20 c
+ 0050                   .dbsym r Command 16 c
+ 0050                   .dbend
+ 0050                   .dbfunc e LCD_Fill _LCD_Fill fV
+ 0050           ;         uiTemp -> R20
+ 0050           ;              i -> R22
+ 0050           ;              j -> R12
+ 0050           ;           Data -> R10
+                        .even
+ 0050           _LCD_Fill::
+ 0050 0E940000          xcall push_gset4
+ 0054 A02E              mov R10,R16
+ 0056                   .dbline -1
+ 0056                   .dbline 145
+ 0056           ;       Command = Command << 1;
+ 0056           ;       SCK_L;
+ 0056           ;       SCK_H;
+ 0056           ;    }
+ 0056           ; }
+ 0056           ; //========================================================================
+ 0056           ; // 函数: void LCD_Fill(unsigned int Data)
+ 0056           ; // 描述: 会屏填充以Data的数据至各点中
+ 0056           ; // 参数: Data   要填充的颜色数据
+ 0056           ; // 返回: 无
+ 0056           ; // 备注: 仅在LCD初始化程序当中调用
+ 0056           ; // 版本:
+ 0056           ; //      2006/10/15      First version
+ 0056           ; //      2007/01/09      V1.2 
+ 0056           ; //========================================================================
+ 0056           ; void LCD_Fill(char Data)
+ 0056           ; {
+ 0056                   .dbline 148
+ 0056           ;    char i,j;
+ 0056           ;    char uiTemp;
+ 0056           ;    uiTemp = GLCD_HEIGHT;
+ 0056 40E2              ldi R20,32
+ 0058                   .dbline 149
+ 0058           ;    uiTemp = uiTemp>>3;
+ 0058 4695              lsr R20
+ 005A 4695              lsr R20
+ 005C 4695              lsr R20
+ 005E                   .dbline 150
+ 005E           ;    for(i=0;i<=uiTemp;i++)                        //往LCD中填充初始化的显示数据
+ 005E 6627              clr R22
+ 0060 10C0              xjmp L19
+ 0062           L16:
+ 0062                   .dbline 151
+ 0062           ;    {
+ 0062                   .dbline 152
+ 0062           ;       LCD_RegWrite(0xb0+i);
+ 0062 062F              mov R16,R22
+ 0064 0055              subi R16,80    ; addi 176
+ 0066 E0DF              xcall _LCD_RegWrite
+ 0068                   .dbline 153
+ 0068           ;       LCD_RegWrite(0x01);
+ 0068 01E0              ldi R16,1
+ 006A DEDF              xcall _LCD_RegWrite
+ 006C                   .dbline 154
+ 006C           ;       LCD_RegWrite(0x10);
+ 006C 00E1              ldi R16,16
+ 006E DCDF              xcall _LCD_RegWrite
+ 0070                   .dbline 155
+ 0070           ;       for(j=0;j<=GLCD_WIDTH;j++)
+ 0070 CC24              clr R12
+ 0072 03C0              xjmp L23
+ 0074           L20:
+ 0074                   .dbline 156
+ 0074                   .dbline 157
+ 0074 0A2D              mov R16,R10
+ 0076 C4DF              xcall _LCD_DataWrite
+ 0078                   .dbline 158
+ 0078           L21:
+ 0078                   .dbline 155
+ 0078 C394              inc R12
+ 007A           L23:
+ 007A                   .dbline 155
+ 007A 80E8              ldi R24,128
+ 007C 8C15              cp R24,R12
+ 007E D0F7              brsh L20
+ 0080                   .dbline 159
+ 0080           L17:
+ 0080                   .dbline 150
+ 0080 6395              inc R22
+ 0082           L19:
+ 0082                   .dbline 150
+ 0082 4617              cp R20,R22
+ 0084 70F7              brsh L16
+ 0086                   .dbline -2
+ 0086           L15:
+ 0086 0E940000          xcall pop_gset4
+ 008A                   .dbline 0 ; func end
+ 008A 0895              ret
+ 008C                   .dbsym r uiTemp 20 c
+ 008C                   .dbsym r i 22 c
+ 008C                   .dbsym r j 12 c
+ 008C                   .dbsym r Data 10 c
+ 008C                   .dbend
+ 008C                   .dbfunc e glcd_init _glcd_init fV
+                        .even
+ 008C           _glcd_init::
+ 008C                   .dbline -1
+ 008C                   .dbline 180
+ 008C           ;       {
+ 008C           ;          LCD_DataWrite(Data);
+ 008C           ;       }
+ 008C           ;    }
+ 008C           ; }
+ 008C           ; //========================================================================
+ 008C           ; // 函数: void LCD_Init(void)
+ 008C           ; // 描述: LCD初始化程序，在里面会完成LCD初始所需要设置的许多寄存器，具体如果
+ 008C           ; //       用户想了解，建议查看DataSheet当中各个寄存器的意义
+ 008C           ; // 参数: 无 
+ 008C           ; // 返回: 无
+ 008C           ; // 备注:
+ 008C           ; // 版本:
+ 008C           ; //      2006/10/15      First version
+ 008C           ; //      2007/01/09      V1.2
+ 008C           ; //      2007/06/27      V1.21 
+ 008C           ; //========================================================================
+ 008C           ; 
+ 008C           ; 
+ 008C           ; // Purpose:       Initialize the LCD.
+ 008C           ; //                Call before using any other LCD function.
+ 008C           ; // Inputs:        OFF - Turns the LCD off
+ 008C           ; //                ON  - Turns the LCD on
+ 008C           ; void glcd_init(void)
+ 008C           ; {
+ 008C                   .dbline 183
+ 008C           ;    //LCD驱动所使用到的端口的初始化（如果有必要的话）
+ 008C           ; //   delay_us(200);
+ 008C           ;    RES_L;
+ 008C AB98              cbi 0x15,3
+ 008E                   .dbline 185
+ 008E           ; //   delay_us(200);
+ 008E           ;    RES_H;
+ 008E AB9A              sbi 0x15,3
+ 0090                   .dbline 188
+ 0090           ; //   delay_us(20);
+ 0090           ;    
+ 0090           ;    LCD_RegWrite(0xaf); //LCD On
+ 0090 0FEA              ldi R16,175
+ 0092 CADF              xcall _LCD_RegWrite
+ 0094                   .dbline 189
+ 0094           ;    LCD_RegWrite(0x2f); //设置上电控制模式
+ 0094 0FE2              ldi R16,47
+ 0096 C8DF              xcall _LCD_RegWrite
+ 0098                   .dbline 190
+ 0098           ;    LCD_RegWrite(0x81); //电量设置模式（显示亮度）
+ 0098 01E8              ldi R16,129
+ 009A C6DF              xcall _LCD_RegWrite
+ 009C                   .dbline 191
+ 009C           ;    LCD_RegWrite(0x28); //指令数据0x0000~0x003f
+ 009C 08E2              ldi R16,40
+ 009E C4DF              xcall _LCD_RegWrite
+ 00A0                   .dbline 192
+ 00A0           ;    LCD_RegWrite(0x24); //V5 内部电压调节电阻设置---27
+ 00A0 04E2              ldi R16,36
+ 00A2 C2DF              xcall _LCD_RegWrite
+ 00A4                   .dbline 194
+ 00A4           ;    //LCD_RegWrite(0x24); //V5 内部电压调节电阻设置---27
+ 00A4           ;    LCD_RegWrite(0xa1); //LCD 偏压设置a2
+ 00A4 01EA              ldi R16,161
+ 00A6 C0DF              xcall _LCD_RegWrite
+ 00A8                   .dbline 195
+ 00A8           ;    LCD_RegWrite(0xc8); //Com 扫描方式设置,反向
+ 00A8 08EC              ldi R16,200
+ 00AA BEDF              xcall _LCD_RegWrite
+ 00AC                   .dbline 196
+ 00AC           ;    LCD_RegWrite(0xa0); //Segment 方向选择,正常
+ 00AC 00EA              ldi R16,160
+ 00AE BCDF              xcall _LCD_RegWrite
+ 00B0                   .dbline 197
+ 00B0           ;    LCD_RegWrite(0xa4); //全屏点亮/变暗指令
+ 00B0 04EA              ldi R16,164
+ 00B2 BADF              xcall _LCD_RegWrite
+ 00B4                   .dbline 198
+ 00B4           ;    LCD_RegWrite(0xa6); //正向反向显示控制指令
+ 00B4 06EA              ldi R16,166
+ 00B6 B8DF              xcall _LCD_RegWrite
+ 00B8                   .dbline 199
+ 00B8           ;    LCD_RegWrite(0xac); //关闭静态指示器
+ 00B8 0CEA              ldi R16,172
+ 00BA B6DF              xcall _LCD_RegWrite
+ 00BC                   .dbline 200
+ 00BC           ;    LCD_RegWrite(0x00); //指令数据
+ 00BC 0027              clr R16
+ 00BE B4DF              xcall _LCD_RegWrite
+ 00C0                   .dbline 201
+ 00C0           ;    LCD_RegWrite(0x40 +0); //设置显示起始行对应RAM
+ 00C0 00E4              ldi R16,64
+ 00C2 B2DF              xcall _LCD_RegWrite
+ 00C4                   .dbline 202
+ 00C4           ;    LCD_RegWrite(0xe0); //设置读写改模式
+ 00C4 00EE              ldi R16,224
+ 00C6 B0DF              xcall _LCD_RegWrite
+ 00C8                   .dbline 205
+ 00C8           ;    ////
+ 00C8           ;      
+ 00C8           ;    glcd_fillScreen(OFF);                // Clear the display
+ 00C8 0027              clr R16
+ 00CA E8D0              xcall _glcd_fillScreen
+ 00CC                   .dbline 207
+ 00CC           ;    
+ 00CC           ;    glcd_update();
+ 00CC 01D0              xcall _glcd_update
+ 00CE                   .dbline -2
+ 00CE           L24:
+ 00CE                   .dbline 0 ; func end
+ 00CE 0895              ret
+ 00D0                   .dbend
+ 00D0                   .dbfunc e glcd_update _glcd_update fV
+ 00D0           ;         uiTemp -> R20
+ 00D0           ;              i -> R22
+ 00D0           ;              j -> R10
+                        .even
+ 00D0           _glcd_update::
+ 00D0 0E940000          xcall push_gset3
+ 00D4                   .dbline -1
+ 00D4                   .dbline 215
+ 00D4           ;    //delay_ms(10);
+ 00D4           ; }
+ 00D4           ; 
+ 00D4           ; 
+ 00D4           ; // Purpose:    Update the LCD with data from the display arrays
+ 00D4           ; 
+ 00D4           ; void glcd_update()
+ 00D4           ; {
+ 00D4                   .dbline 218
+ 00D4           ;    char i,j;
+ 00D4           ;    char uiTemp;
+ 00D4           ;    if(glcdhalf==0){
+ 00D4 20900002          lds R2,_glcdhalf
+ 00D8 2220              tst R2
+ 00DA 09F5              brne L26
+ 00DC                   .dbline 218
+ 00DC                   .dbline 221
+ 00DC           ;      //uiTemp = GLCD_HEIGHT;
+ 00DC           ;      //uiTemp = uiTemp/8/2;
+ 00DC           ;        uiTemp=4;
+ 00DC 44E0              ldi R20,4
+ 00DE                   .dbline 222
+ 00DE           ;      for(i=0;i<uiTemp;i++)                        //往LCD中填充初始化的显示数据
+ 00DE 6627              clr R22
+ 00E0 1BC0              xjmp L31
+ 00E2           L28:
+ 00E2                   .dbline 223
+ 00E2           ;      {
+ 00E2                   .dbline 224
+ 00E2           ;         LCD_RegWrite(0xb0+i);
+ 00E2 062F              mov R16,R22
+ 00E4 0055              subi R16,80    ; addi 176
+ 00E6 A0DF              xcall _LCD_RegWrite
+ 00E8                   .dbline 225
+ 00E8           ;         LCD_RegWrite(0x00);
+ 00E8 0027              clr R16
+ 00EA 9EDF              xcall _LCD_RegWrite
+ 00EC                   .dbline 226
+ 00EC           ;         LCD_RegWrite(0x10);
+ 00EC 00E1              ldi R16,16
+ 00EE 9CDF              xcall _LCD_RegWrite
+ 00F0                   .dbline 227
+ 00F0           ;         for(j=0;j<=GLCD_WIDTH;j++)
+ 00F0 AA24              clr R10
+ 00F2 0EC0              xjmp L35
+ 00F4           L32:
+ 00F4                   .dbline 228
+ 00F4                   .dbline 229
+ 00F4 84E0              ldi R24,4
+ 00F6 8A9D              mul R24,R10
+ 00F8 1001              movw R2,R0
+ 00FA 80E0              ldi R24,<_LCD_Buffer
+ 00FC 90E0              ldi R25,>_LCD_Buffer
+ 00FE 280E              add R2,R24
+ 0100 391E              adc R3,R25
+ 0102 E62F              mov R30,R22
+ 0104 FF27              clr R31
+ 0106 E20D              add R30,R2
+ 0108 F31D              adc R31,R3
+ 010A 0081              ldd R16,z+0
+ 010C 79DF              xcall _LCD_DataWrite
+ 010E                   .dbline 230
+ 010E           L33:
+ 010E                   .dbline 227
+ 010E A394              inc R10
+ 0110           L35:
+ 0110                   .dbline 227
+ 0110 80E8              ldi R24,128
+ 0112 8A15              cp R24,R10
+ 0114 78F7              brsh L32
+ 0116                   .dbline 231
+ 0116           L29:
+ 0116                   .dbline 222
+ 0116 6395              inc R22
+ 0118           L31:
+ 0118                   .dbline 222
+ 0118 6417              cp R22,R20
+ 011A 18F3              brlo L28
+ 011C                   .dbline 232
+ 011C           ;         {
+ 011C           ;           LCD_DataWrite(LCD_Buffer[j][i]);
+ 011C           ;         }
+ 011C           ;      }
+ 011C           ;    }
+ 011C 20C0              xjmp L27
+ 011E           L26:
+ 011E                   .dbline 233
+ 011E           ;    else{
+ 011E                   .dbline 235
+ 011E           ;      //uiTemp = GLCD_HEIGHT;
+ 011E           ;      uiTemp = 4;
+ 011E 44E0              ldi R20,4
+ 0120                   .dbline 236
+ 0120           ;      for(i=0;i<uiTemp;i++)                        //往LCD中填充初始化的显示数据
+ 0120 6627              clr R22
+ 0122 1BC0              xjmp L39
+ 0124           L36:
+ 0124                   .dbline 237
+ 0124           ;      {
+ 0124                   .dbline 238
+ 0124           ;         LCD_RegWrite(0xb0+i+4);//页地址
+ 0124 062F              mov R16,R22
+ 0126 0C54              subi R16,76    ; addi 180
+ 0128 7FDF              xcall _LCD_RegWrite
+ 012A                   .dbline 239
+ 012A           ;         LCD_RegWrite(0x00);//列起始地址
+ 012A 0027              clr R16
+ 012C 7DDF              xcall _LCD_RegWrite
+ 012E                   .dbline 240
+ 012E           ;         LCD_RegWrite(0x10);
+ 012E 00E1              ldi R16,16
+ 0130 7BDF              xcall _LCD_RegWrite
+ 0132                   .dbline 241
+ 0132           ;         for(j=0;j<=GLCD_WIDTH;j++)
+ 0132 AA24              clr R10
+ 0134 0EC0              xjmp L43
+ 0136           L40:
+ 0136                   .dbline 242
+ 0136                   .dbline 243
+ 0136 84E0              ldi R24,4
+ 0138 8A9D              mul R24,R10
+ 013A 1001              movw R2,R0
+ 013C 80E0              ldi R24,<_LCD_Buffer
+ 013E 90E0              ldi R25,>_LCD_Buffer
+ 0140 280E              add R2,R24
+ 0142 391E              adc R3,R25
+ 0144 E62F              mov R30,R22
+ 0146 FF27              clr R31
+ 0148 E20D              add R30,R2
+ 014A F31D              adc R31,R3
+ 014C 0081              ldd R16,z+0
+ 014E 58DF              xcall _LCD_DataWrite
+ 0150                   .dbline 244
+ 0150           L41:
+ 0150                   .dbline 241
+ 0150 A394              inc R10
+ 0152           L43:
+ 0152                   .dbline 241
+ 0152 80E8              ldi R24,128
+ 0154 8A15              cp R24,R10
+ 0156 78F7              brsh L40
+ 0158                   .dbline 245
+ 0158           L37:
+ 0158                   .dbline 236
+ 0158 6395              inc R22
+ 015A           L39:
+ 015A                   .dbline 236
+ 015A 6417              cp R22,R20
+ 015C 18F3              brlo L36
+ 015E                   .dbline 246
+ 015E           L27:
+ 015E                   .dbline -2
+ 015E           L25:
+ 015E 0E940000          xcall pop_gset3
+ 0162                   .dbline 0 ; func end
+ 0162 0895              ret
+ 0164                   .dbsym r uiTemp 20 c
+ 0164                   .dbsym r i 22 c
+ 0164                   .dbsym r j 10 c
+ 0164                   .dbend
+ 0164                   .dbfunc e glcd_pixel _glcd_pixel fV
+ 0164           ;          color -> y+4
+ 0164           ;              y -> R20
+ 0164           ;              x -> R22
+                        .even
+ 0164           _glcd_pixel::
+ 0164 0E940000          xcall push_gset2
+ 0168 422F              mov R20,R18
+ 016A 602F              mov R22,R16
+ 016C                   .dbline -1
+ 016C                   .dbline 256
+ 016C           ;         {
+ 016C           ;           LCD_DataWrite(LCD_Buffer[j][i]);
+ 016C           ;         }
+ 016C           ;      }
+ 016C           ;    }   
+ 016C           ; }
+ 016C           ; 
+ 016C           ; 
+ 016C           ; 
+ 016C           ; // Purpose:    Turn a pixel on a graphic LCD on or off
+ 016C           ; // Inputs:     1) x - the x coordinate of the pixel
+ 016C           ; //             2) y - the y coordinate of the pixel
+ 016C           ; //             3) color - ON or OFF
+ 016C           ; void glcd_pixel(char x, char y, char color)
+ 016C           ; {
+ 016C                   .dbline 257
+ 016C           ;    if(glcdhalf==0){
+ 016C 20900002          lds R2,_glcdhalf
+ 0170 2220              tst R2
+ 0172 09F0              breq X0
+ 0174 46C0              xjmp L45
+ 0176           X0:
+ 0176                   .dbline 257
+ 0176                   .dbline 258
+ 0176           ;      if(y/8<4){
+ 0176 842F              mov R24,R20
+ 0178 8695              lsr R24
+ 017A 8695              lsr R24
+ 017C 8695              lsr R24
+ 017E 8430              cpi R24,4
+ 0180 08F0              brlo X1
+ 0182 89C0              xjmp L46
+ 0184           X1:
+ 0184                   .dbline 258
+ 0184                   .dbline 259
+ 0184           ;          if(color==1){
+ 0184 8C81              ldd R24,y+4
+ 0186 8130              cpi R24,1
+ 0188 E9F4              brne L49
+ 018A                   .dbline 259
+ 018A                   .dbline 260
+ 018A           ;           SETBIT(LCD_Buffer[x][y/8], y%8);
+ 018A 84E0              ldi R24,4
+ 018C 869F              mul R24,R22
+ 018E 1001              movw R2,R0
+ 0190 80E0              ldi R24,<_LCD_Buffer
+ 0192 90E0              ldi R25,>_LCD_Buffer
+ 0194 280E              add R2,R24
+ 0196 391E              adc R3,R25
+ 0198 28E0              ldi R18,8
+ 019A 30E0              ldi R19,0
+ 019C 042F              mov R16,R20
+ 019E 1127              clr R17
+ 01A0 0E940000          xcall div16s
+ 01A4 2801              movw R4,R16
+ 01A6 420C              add R4,R2
+ 01A8 531C              adc R5,R3
+ 01AA 18E0              ldi R17,8
+ 01AC 042F              mov R16,R20
+ 01AE 0E940000          xcall mod8u
+ 01B2 102F              mov R17,R16
+ 01B4 01E0              ldi R16,1
+ 01B6 0E940000          xcall lsl8
+ 01BA F201              movw R30,R4
+ 01BC 2080              ldd R2,z+0
+ 01BE 202A              or R2,R16
+ 01C0 2082              std z+0,R2
+ 01C2                   .dbline 261
+ 01C2           ;        }
+ 01C2 69C0              xjmp L46
+ 01C4           L49:
+ 01C4                   .dbline 262
+ 01C4           ;        else{
+ 01C4                   .dbline 263
+ 01C4           ;           CLRBIT(LCD_Buffer[x][y/8], y%8);
+ 01C4 84E0              ldi R24,4
+ 01C6 869F              mul R24,R22
+ 01C8 1001              movw R2,R0
+ 01CA 80E0              ldi R24,<_LCD_Buffer
+ 01CC 90E0              ldi R25,>_LCD_Buffer
+ 01CE 280E              add R2,R24
+ 01D0 391E              adc R3,R25
+ 01D2 28E0              ldi R18,8
+ 01D4 30E0              ldi R19,0
+ 01D6 042F              mov R16,R20
+ 01D8 1127              clr R17
+ 01DA 0E940000          xcall div16s
+ 01DE 2801              movw R4,R16
+ 01E0 420C              add R4,R2
+ 01E2 531C              adc R5,R3
+ 01E4 18E0              ldi R17,8
+ 01E6 042F              mov R16,R20
+ 01E8 0E940000          xcall mod8u
+ 01EC 102F              mov R17,R16
+ 01EE 01E0              ldi R16,1
+ 01F0 0E940000          xcall lsl8
+ 01F4 202E              mov R2,R16
+ 01F6 2094              com R2
+ 01F8 F201              movw R30,R4
+ 01FA 3080              ldd R3,z+0
+ 01FC 3220              and R3,R2
+ 01FE 3082              std z+0,R3
+ 0200                   .dbline 264
+ 0200           ;        }
+ 0200                   .dbline 265
+ 0200           ;        }  
+ 0200                   .dbline 266
+ 0200           ;    }
+ 0200 4AC0              xjmp L46
+ 0202           L45:
+ 0202                   .dbline 267
+ 0202           ;    else{
+ 0202                   .dbline 268
+ 0202           ;      if(y/8>3){
+ 0202 83E0              ldi R24,3
+ 0204 242E              mov R2,R20
+ 0206 2694              lsr R2
+ 0208 2694              lsr R2
+ 020A 2694              lsr R2
+ 020C 8215              cp R24,R2
+ 020E 08F0              brlo X2
+ 0210 42C0              xjmp L51
+ 0212           X2:
+ 0212                   .dbline 268
+ 0212                   .dbline 269
+ 0212           ;          if(color==1){
+ 0212 8C81              ldd R24,y+4
+ 0214 8130              cpi R24,1
+ 0216 F9F4              brne L53
+ 0218                   .dbline 269
+ 0218                   .dbline 270
+ 0218           ;           SETBIT(LCD_Buffer[x][y/8-4], y%8);
+ 0218 84E0              ldi R24,4
+ 021A 869F              mul R24,R22
+ 021C 1001              movw R2,R0
+ 021E 80E0              ldi R24,<_LCD_Buffer
+ 0220 90E0              ldi R25,>_LCD_Buffer
+ 0222 280E              add R2,R24
+ 0224 391E              adc R3,R25
+ 0226 28E0              ldi R18,8
+ 0228 30E0              ldi R19,0
+ 022A 042F              mov R16,R20
+ 022C 1127              clr R17
+ 022E 0E940000          xcall div16s
+ 0232 C801              movw R24,R16
+ 0234 0497              sbiw R24,4
+ 0236 820D              add R24,R2
+ 0238 931D              adc R25,R3
+ 023A 1C01              movw R2,R24
+ 023C 18E0              ldi R17,8
+ 023E 042F              mov R16,R20
+ 0240 0E940000          xcall mod8u
+ 0244 102F              mov R17,R16
+ 0246 01E0              ldi R16,1
+ 0248 0E940000          xcall lsl8
+ 024C F101              movw R30,R2
+ 024E 4080              ldd R4,z+0
+ 0250 402A              or R4,R16
+ 0252 4082              std z+0,R4
+ 0254                   .dbline 271
+ 0254           ;        }
+ 0254 20C0              xjmp L54
+ 0256           L53:
+ 0256                   .dbline 272
+ 0256           ;        else{
+ 0256                   .dbline 273
+ 0256           ;           CLRBIT(LCD_Buffer[x][y/8-4], y%8);
+ 0256 84E0              ldi R24,4
+ 0258 869F              mul R24,R22
+ 025A 1001              movw R2,R0
+ 025C 80E0              ldi R24,<_LCD_Buffer
+ 025E 90E0              ldi R25,>_LCD_Buffer
+ 0260 280E              add R2,R24
+ 0262 391E              adc R3,R25
+ 0264 28E0              ldi R18,8
+ 0266 30E0              ldi R19,0
+ 0268 042F              mov R16,R20
+ 026A 1127              clr R17
+ 026C 0E940000          xcall div16s
+ 0270 C801              movw R24,R16
+ 0272 0497              sbiw R24,4
+ 0274 820D              add R24,R2
+ 0276 931D              adc R25,R3
+ 0278 1C01              movw R2,R24
+ 027A 18E0              ldi R17,8
+ 027C 042F              mov R16,R20
+ 027E 0E940000          xcall mod8u
+ 0282 102F              mov R17,R16
+ 0284 01E0              ldi R16,1
+ 0286 0E940000          xcall lsl8
+ 028A 402E              mov R4,R16
+ 028C 4094              com R4
+ 028E F101              movw R30,R2
+ 0290 5080              ldd R5,z+0
+ 0292 5420              and R5,R4
+ 0294 5082              std z+0,R5
+ 0296                   .dbline 274
+ 0296           ;        }
+ 0296           L54:
+ 0296                   .dbline 275
+ 0296           ;        }  
+ 0296           L51:
+ 0296                   .dbline 276
+ 0296           L46:
+ 0296                   .dbline -2
+ 0296           L44:
+ 0296 0E940000          xcall pop_gset2
+ 029A                   .dbline 0 ; func end
+ 029A 0895              ret
+ 029C                   .dbsym l color 4 c
+ 029C                   .dbsym r y 20 c
+ 029C                   .dbsym r x 22 c
+ 029C                   .dbend
+ 029C                   .dbfunc e glcd_fillScreen _glcd_fillScreen fV
+ 029C           ;              i -> R20
+ 029C           ;              j -> R22
+ 029C           ;          color -> R16
+                        .even
+ 029C           _glcd_fillScreen::
+ 029C 0E940000          xcall push_gset2
+ 02A0                   .dbline -1
+ 02A0                   .dbline 284
+ 02A0           ;    } 
+ 02A0           ; }
+ 02A0           ; 
+ 02A0           ; 
+ 02A0           ; // Purpose:    Fill the LCD screen with the passed in color
+ 02A0           ; // Inputs:     ON  - turn all the pixels on
+ 02A0           ; //             OFF - turn all the pixels off
+ 02A0           ; void glcd_fillScreen(char color)
+ 02A0           ; {
+ 02A0                   .dbline 286
+ 02A0           ;    char i,j;
+ 02A0           ;    if(color==1){
+ 02A0 0130              cpi R16,1
+ 02A2 C1F4              brne L56
+ 02A4                   .dbline 286
+ 02A4                   .dbline 287
+ 02A4           ;      for(i=0;i<GLCD_WIDTH;i++)
+ 02A4 4427              clr R20
+ 02A6 13C0              xjmp L61
+ 02A8           L58:
+ 02A8                   .dbline 288
+ 02A8           ;        for(j=0;j<4;j++)//  /2是因为分上下两屏
+ 02A8 6627              clr R22
+ 02AA 0EC0              xjmp L65
+ 02AC           L62:
+ 02AC                   .dbline 289
+ 02AC 84E0              ldi R24,4
+ 02AE 849F              mul R24,R20
+ 02B0 1001              movw R2,R0
+ 02B2 80E0              ldi R24,<_LCD_Buffer
+ 02B4 90E0              ldi R25,>_LCD_Buffer
+ 02B6 280E              add R2,R24
+ 02B8 391E              adc R3,R25
+ 02BA E62F              mov R30,R22
+ 02BC FF27              clr R31
+ 02BE E20D              add R30,R2
+ 02C0 F31D              adc R31,R3
+ 02C2 8FEF              ldi R24,255
+ 02C4 8083              std z+0,R24
+ 02C6           L63:
+ 02C6                   .dbline 288
+ 02C6 6395              inc R22
+ 02C8           L65:
+ 02C8                   .dbline 288
+ 02C8 6430              cpi R22,4
+ 02CA 80F3              brlo L62
+ 02CC           L59:
+ 02CC                   .dbline 287
+ 02CC 4395              inc R20
+ 02CE           L61:
+ 02CE                   .dbline 287
+ 02CE 4038              cpi R20,128
+ 02D0 58F3              brlo L58
+ 02D2                   .dbline 290
+ 02D2           ;          LCD_Buffer[i][j]=0xFF;
+ 02D2           ;    }           
+ 02D2 17C0              xjmp L57
+ 02D4           L56:
+ 02D4                   .dbline 291
+ 02D4           ;    else{
+ 02D4                   .dbline 292
+ 02D4           ;      for(i=0;i<GLCD_WIDTH;i++)
+ 02D4 4427              clr R20
+ 02D6 13C0              xjmp L69
+ 02D8           L66:
+ 02D8                   .dbline 293
+ 02D8           ;        for(j=0;j<4;j++)//  GLCD_HEIGHT/8/2   /2是因为分上下两屏
+ 02D8 6627              clr R22
+ 02DA 0EC0              xjmp L73
+ 02DC           L70:
+ 02DC                   .dbline 294
+ 02DC 84E0              ldi R24,4
+ 02DE 849F              mul R24,R20
+ 02E0 1001              movw R2,R0
+ 02E2 80E0              ldi R24,<_LCD_Buffer
+ 02E4 90E0              ldi R25,>_LCD_Buffer
+ 02E6 280E              add R2,R24
+ 02E8 391E              adc R3,R25
+ 02EA E62F              mov R30,R22
+ 02EC FF27              clr R31
+ 02EE E20D              add R30,R2
+ 02F0 F31D              adc R31,R3
+ 02F2 2224              clr R2
+ 02F4 2082              std z+0,R2
+ 02F6           L71:
+ 02F6                   .dbline 293
+ 02F6 6395              inc R22
+ 02F8           L73:
+ 02F8                   .dbline 293
+ 02F8 6430              cpi R22,4
+ 02FA 80F3              brlo L70
+ 02FC           L67:
+ 02FC                   .dbline 292
+ 02FC 4395              inc R20
+ 02FE           L69:
+ 02FE                   .dbline 292
+ 02FE 4038              cpi R20,128
+ 0300 58F3              brlo L66
+ 0302                   .dbline 295
+ 0302           L57:
+ 0302                   .dbline -2
+ 0302           L55:
+ 0302 0E940000          xcall pop_gset2
+ 0306                   .dbline 0 ; func end
+ 0306 0895              ret
+ 0308                   .dbsym r i 20 c
+ 0308                   .dbsym r j 22 c
+ 0308                   .dbsym r color 16 c
+ 0308                   .dbend
+                        .area bss(ram, con, rel)
+ 0000                   .dbfile E:\avr\iccavrproject\电池容量测试\mzl05.c
+ 0000           _LCD_Buffer::
+ 0000                   .blkb 512
+ 0200                   .dbsym e LCD_Buffer _LCD_Buffer A[512:128:4]c
+ 0200           _glcdhalf::
+ 0200                   .blkb 1
+ 0201                   .dbsym e glcdhalf _glcdhalf c

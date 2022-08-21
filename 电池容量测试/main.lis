@@ -1,0 +1,2142 @@
+                        .module main.c
+                        .area data(ram, con, rel)
+ 0000           _adcnoloadvalue::
+ 0000                   .blkb 2
+                        .area idata
+ 0000 0000              .word 0
+                        .area data(ram, con, rel)
+ 0002                   .dbfile E:\avr\iccavrproject\电池容量测试\main.c
+ 0002                   .dbsym e adcnoloadvalue _adcnoloadvalue I
+ 0002           _adcloadvalue::
+ 0002                   .blkb 2
+                        .area idata
+ 0002 0000              .word 0
+                        .area data(ram, con, rel)
+ 0004                   .dbfile E:\avr\iccavrproject\电池容量测试\main.c
+ 0004                   .dbsym e adcloadvalue _adcloadvalue I
+ 0004           _firststart::
+ 0004                   .blkb 1
+                        .area idata
+ 0004 00                .byte 0
+                        .area data(ram, con, rel)
+ 0005                   .dbfile E:\avr\iccavrproject\电池容量测试\main.c
+ 0005                   .dbsym e firststart _firststart c
+ 0005           _rotate_key::
+ 0005                   .blkb 1
+                        .area idata
+ 0005 00                .byte 0
+                        .area data(ram, con, rel)
+ 0006                   .dbfile E:\avr\iccavrproject\电池容量测试\main.c
+ 0006                   .dbsym e rotate_key _rotate_key c
+ 0006           _rotate_code::
+ 0006                   .blkb 1
+                        .area idata
+ 0006 00                .byte 0
+                        .area data(ram, con, rel)
+ 0007                   .dbfile E:\avr\iccavrproject\电池容量测试\main.c
+ 0007                   .dbsym e rotate_code _rotate_code c
+ 0007           _rotate_dir::
+ 0007                   .blkb 1
+                        .area idata
+ 0007 00                .byte 0
+                        .area data(ram, con, rel)
+ 0008                   .dbfile E:\avr\iccavrproject\电池容量测试\main.c
+ 0008                   .dbsym e rotate_dir _rotate_dir c
+ 0008           _stopvalue::
+ 0008                   .blkb 2
+                        .area idata
+ 0008 0002              .word 512
+                        .area data(ram, con, rel)
+ 000A                   .dbfile E:\avr\iccavrproject\电池容量测试\main.c
+ 000A                   .dbsym e stopvalue _stopvalue i
+ 000A           _adccap::
+ 000A                   .blkb 2
+                        .area idata
+ 000A 0000              .word 0
+                        .area data(ram, con, rel)
+ 000C                   .dbfile E:\avr\iccavrproject\电池容量测试\main.c
+ 000C                   .dbsym e adccap _adccap i
+                        .area text(rom, con, rel)
+ 0000                   .dbfile E:\avr\iccavrproject\电池容量测试\main.c
+ 0000                   .dbfunc e port_init _port_init fV
+                        .even
+ 0000           _port_init::
+ 0000                   .dbline -1
+ 0000                   .dbline 55
+ 0000           ; //DIY低成本电池容量测试仪，测试原理：测试有负载与无负载间的电压差，
+ 0000           ; //通过已知外部电阻计算电池内阻。通过每隔一秒测一下电压，通过已知外部放电电阻计算电流
+ 0000           ; //累积计算毫安时
+ 0000           ; //电源为USB5V
+ 0000           ; //12864接PORTC，* 0: SDI  1: SCK  2: A0  3: RS  4: CS1 
+ 0000           ; //12864     面向正面gnd|VCC|SDI|SCK|A0|RES|CS1,CS1标的1脚
+ 0000           ; //电池接PORTA 0，通过1K+1K分压接入AD，AD参考源为内部2.56V参考源，PORTA置为AD转换器，可同时测8路电池  
+ 0000           ; //电池通过6.8水泥电阻放电
+ 0000           ; //继电器接PORTD 7，用于控制电池放电启停
+ 0000           ; //旋转编码器K关接INT 0，PORTD 2,用于操作放电启停
+ 0000           ; //旋转编码器A接INT 1，PORTD 3，B接PORT D 4，用于调整放电截止电压，
+ 0000           ; //注意施转编码器各脚需接104电容到地，通过510电阻到各脚
+ 0000           ; //开发平台ICCAVR 6.31A，使用了num2str-数字转字符串,mygraphic-抽象图形库,mzl05-针对铭正同创mzl05-12864的硬件层接口
+ 0000           ; // Target : M16
+ 0000           ; // Crystal: 8M外部晶振
+ 0000           ; 
+ 0000           ; //发现问题，AD接地仍有电压，可能电AREF没有外接电容，好象不是，PORTA=0x00后解决，但比万用表高0.1
+ 0000           ; 
+ 0000           ; #include <iom16v.h>
+ 0000           ; #include <macros.h>
+ 0000           ; #include <eeprom.h>
+ 0000           ; #include "num2str.h"
+ 0000           ; #include "mzl05.h"
+ 0000           ; #include "myGRAPHICS.h"
+ 0000           ; extern char glcdhalf;//由于M16内存局限每次只刷新半个屏幕
+ 0000           ; int count;//timer0计数
+ 0000           ; 
+ 0000           ; int adc;//ADC转换结果
+ 0000           ; float adcfloat;//ADC转换结的浮点表示
+ 0000           ; int adcnoloadvalue=0,adcloadvalue=0;//无载电压与有载电压，用于计算内阻
+ 0000           ; unsigned char firststart=0;//第一次进入有载
+ 0000           ; 
+ 0000           ; unsigned char adcbuffer[8];//ADC字符串结果 
+ 0000           ; 
+ 0000           ; unsigned char rotate_key=0;//旋转编码器开关状态
+ 0000           ; unsigned char rotate_code=0;//PIND,用于判断旋转方向
+ 0000           ; unsigned char rotate_dir=0;//旋转编码器方向
+ 0000           ; 
+ 0000           ; unsigned char hour,minute,second;
+ 0000           ; unsigned int secondcount;
+ 0000           ; 
+ 0000           ; unsigned int stopvalue=512;//停止放电电压
+ 0000           ; //unsigned char tempunsignedchar;
+ 0000           ; 
+ 0000           ; float res;//电池内阻
+ 0000           ; 
+ 0000           ; float cap;//电池容量
+ 0000           ; unsigned int adccap=0;//电池容量整数表示
+ 0000           ; float pcap;//以功率计算容量
+ 0000           ; 
+ 0000           ; unsigned char adccurv[128];//放电电压曲线，每分钟一记，可记2小时
+ 0000           ; unsigned char adccurvcount;
+ 0000           ; unsigned int i;
+ 0000           ; void port_init(void)
+ 0000           ; {
+ 0000                   .dbline 56
+ 0000           ;       PORTA = 0x00;
+ 0000 2224              clr R2
+ 0002 2BBA              out 0x1b,R2
+ 0004                   .dbline 57
+ 0004           ;       DDRA  = 0x00;
+ 0004 2ABA              out 0x1a,R2
+ 0006                   .dbline 58
+ 0006           ;       PORTB = 0xFF;
+ 0006 8FEF              ldi R24,255
+ 0008 88BB              out 0x18,R24
+ 000A                   .dbline 59
+ 000A           ;       DDRB  = 0xFF;
+ 000A 87BB              out 0x17,R24
+ 000C                   .dbline 60
+ 000C           ;       PORTC = 0xFF;
+ 000C 85BB              out 0x15,R24
+ 000E                   .dbline 61
+ 000E           ;       DDRC  = 0xFF;
+ 000E 84BB              out 0x14,R24
+ 0010                   .dbline 62
+ 0010           ;       PORTD = 0x7F;
+ 0010 8FE7              ldi R24,127
+ 0012 82BB              out 0x12,R24
+ 0014                   .dbline 63
+ 0014           ;       DDRD  = 0x80;//PORTD PIN7为继电器控制
+ 0014 80E8              ldi R24,128
+ 0016 81BB              out 0x11,R24
+ 0018                   .dbline -2
+ 0018           L1:
+ 0018                   .dbline 0 ; func end
+ 0018 0895              ret
+ 001A                   .dbend
+                        .area vector(rom, abs)
+                        .org 4
+ 0004 0C940D00          jmp _int0_isr
+                        .area text(rom, con, rel)
+ 001A                   .dbfile E:\avr\iccavrproject\电池容量测试\main.c
+ 001A                   .dbfunc e int0_isr _int0_isr fV
+                        .even
+ 001A           _int0_isr::
+ 001A 2A92              st -y,R2
+ 001C 8A93              st -y,R24
+ 001E 2FB6              in R2,0x3f
+ 0020 2A92              st -y,R2
+ 0022                   .dbline -1
+ 0022                   .dbline 68
+ 0022           ; }
+ 0022           ; //外部中断0
+ 0022           ; #pragma interrupt_handler int0_isr:2
+ 0022           ; void int0_isr(void)
+ 0022           ; {
+ 0022                   .dbline 69
+ 0022           ;   if(rotate_key==0){//未放电状态
+ 0022 20900500          lds R2,_rotate_key
+ 0026 2220              tst R2
+ 0028 71F4              brne L3
+ 002A                   .dbline 69
+ 002A                   .dbline 70
+ 002A           ;     PORTD |=1<<7;   //关闭常开触点，开始放电
+ 002A 979A              sbi 0x12,7
+ 002C                   .dbline 71
+ 002C           ;       rotate_key=1;   //记录标志
+ 002C 81E0              ldi R24,1
+ 002E 80930500          sts _rotate_key,R24
+ 0032                   .dbline 72
+ 0032           ;       hour=minute=second=0;  //初始化计时器
+ 0032 2224              clr R2
+ 0034 20929100          sts _second,R2
+ 0038 20929200          sts _minute,R2
+ 003C 20929300          sts _hour,R2
+ 0040                   .dbline 73
+ 0040           ;       firststart=1;   //第一次进入放电状态
+ 0040 80930400          sts _firststart,R24
+ 0044                   .dbline 74
+ 0044 04C0              xjmp L4
+ 0046           L3:
+ 0046                   .dbline 74
+ 0046                   .dbline 75
+ 0046 9798              cbi 0x12,7
+ 0048                   .dbline 76
+ 0048 2224              clr R2
+ 004A 20920500          sts _rotate_key,R2
+ 004E                   .dbline 77
+ 004E           L4:
+ 004E                   .dbline -2
+ 004E           L2:
+ 004E 2990              ld R2,y+
+ 0050 2FBE              out 0x3f,R2
+ 0052 8991              ld R24,y+
+ 0054 2990              ld R2,y+
+ 0056                   .dbline 0 ; func end
+ 0056 1895              reti
+ 0058                   .dbend
+                        .area vector(rom, abs)
+                        .org 8
+ 0008 0C942C00          jmp _int1_isr
+                        .area text(rom, con, rel)
+ 0058                   .dbfile E:\avr\iccavrproject\电池容量测试\main.c
+ 0058                   .dbfunc e int1_isr _int1_isr fV
+                        .even
+ 0058           _int1_isr::
+ 0058 2A92              st -y,R2
+ 005A 8A93              st -y,R24
+ 005C 9A93              st -y,R25
+ 005E 2FB6              in R2,0x3f
+ 0060 2A92              st -y,R2
+ 0062                   .dbline -1
+ 0062                   .dbline 83
+ 0062           ;   }else{
+ 0062           ;     PORTD &=~(1<<7); //断开继电器
+ 0062           ;       rotate_key=0;    //记录标志
+ 0062           ;   }
+ 0062           ; }
+ 0062           ; //外部中断1
+ 0062           ; //在旋转编码器A相下降沿查看B相电平，如果是高++
+ 0062           ; #pragma interrupt_handler int1_isr:3
+ 0062           ; void int1_isr(void)
+ 0062           ; { 
+ 0062                   .dbline 84
+ 0062           ;   rotate_code=PIND;  
+ 0062 20B2              in R2,0x10
+ 0064 20920600          sts _rotate_code,R2
+ 0068                   .dbline 85
+ 0068           ;   if((rotate_code & 0x10) == 0x10){
+ 0068 822D              mov R24,R2
+ 006A 8071              andi R24,16
+ 006C 8031              cpi R24,16
+ 006E 51F4              brne L6
+ 0070                   .dbline 85
+ 0070                   .dbline 86
+ 0070           ;     stopvalue++;      
+ 0070 80910800          lds R24,_stopvalue
+ 0074 90910900          lds R25,_stopvalue+1
+ 0078 0196              adiw R24,1
+ 007A 90930900          sts _stopvalue+1,R25
+ 007E 80930800          sts _stopvalue,R24
+ 0082                   .dbline 87
+ 0082 09C0              xjmp L7
+ 0084           L6:
+ 0084                   .dbline 87
+ 0084                   .dbline 88
+ 0084 80910800          lds R24,_stopvalue
+ 0088 90910900          lds R25,_stopvalue+1
+ 008C 0197              sbiw R24,1
+ 008E 90930900          sts _stopvalue+1,R25
+ 0092 80930800          sts _stopvalue,R24
+ 0096                   .dbline 89
+ 0096           L7:
+ 0096                   .dbline -2
+ 0096           L5:
+ 0096 2990              ld R2,y+
+ 0098 2FBE              out 0x3f,R2
+ 009A 9991              ld R25,y+
+ 009C 8991              ld R24,y+
+ 009E 2990              ld R2,y+
+ 00A0                   .dbline 0 ; func end
+ 00A0 1895              reti
+ 00A2                   .dbend
+ 00A2                   .dbfunc e timer0_init _timer0_init fV
+                        .even
+ 00A2           _timer0_init::
+ 00A2                   .dbline -1
+ 00A2                   .dbline 97
+ 00A2           ;   }else{
+ 00A2           ;     stopvalue--;    
+ 00A2           ;   }
+ 00A2           ;   //tempunsignedchar=stopvalue % 256;
+ 00A2           ;   //EEPROMwrite(1,tempunsignedchar);
+ 00A2           ;   //tempunsignedchar=stopvalue / 256;
+ 00A2           ;   //EEPROMwrite(2,tempunsignedchar);
+ 00A2           ; }
+ 00A2           ; 
+ 00A2           ; void timer0_init(void) //定时器初始化程序
+ 00A2           ; {
+ 00A2                   .dbline 98
+ 00A2           ; TCCR0 = 0x00; //停止定时器
+ 00A2 2224              clr R2
+ 00A4 23BE              out 0x33,R2
+ 00A6                   .dbline 100
+ 00A6           ; //TCNT0 = 0x3A; //设置初始值,75us，合计0.075X256=20ms//3A好用，计算值44
+ 00A6           ; TCNT0=0xCF;//75us/4
+ 00A6 8FEC              ldi R24,207
+ 00A8 82BF              out 0x32,R24
+ 00AA                   .dbline 101
+ 00AA           ; TCCR0 = 0x02; //开动定时器,可能是主频/8
+ 00AA 82E0              ldi R24,2
+ 00AC 83BF              out 0x33,R24
+ 00AE                   .dbline -2
+ 00AE           L8:
+ 00AE                   .dbline 0 ; func end
+ 00AE 0895              ret
+ 00B0                   .dbend
+ 00B0                   .dbfunc e ADInit _ADInit fV
+                        .even
+ 00B0           _ADInit::
+ 00B0                   .dbline -1
+ 00B0                   .dbline 104
+ 00B0           ; }
+ 00B0           ; void ADInit(void)
+ 00B0           ; {
+ 00B0                   .dbline 105
+ 00B0           ;     ADMUX|=(1<<REFS1)|(1<<REFS0);  //选择内部2.56V为ADC的参考电压
+ 00B0 87B1              in R24,0x7
+ 00B2 806C              ori R24,192
+ 00B4 87B9              out 0x7,R24
+ 00B6                   .dbline 106
+ 00B6           ;     ADMUX&=~(1<<ADLAR);  //转换结果右对齐
+ 00B6 3D98              cbi 0x7,5
+ 00B8                   .dbline 107
+ 00B8           ;       ADMUX&=~(1<<MUX4);
+ 00B8 3C98              cbi 0x7,4
+ 00BA                   .dbline 108
+ 00BA           ;       ADMUX&=~(1<<MUX3);
+ 00BA 3B98              cbi 0x7,3
+ 00BC                   .dbline 109
+ 00BC           ;       ADMUX&=~(1<<MUX2);
+ 00BC 3A98              cbi 0x7,2
+ 00BE                   .dbline 110
+ 00BE           ;       ADMUX&=~(1<<MUX1);
+ 00BE 3998              cbi 0x7,1
+ 00C0                   .dbline 111
+ 00C0           ;       ADMUX&=~(1<<MUX0);        //选择通道ADC0
+ 00C0 3898              cbi 0x7,0
+ 00C2                   .dbline 112
+ 00C2           ;       ADCSRA|=(1<<ADPS2)|(1<<ADPS0);
+ 00C2 86B1              in R24,0x6
+ 00C4 8560              ori R24,5
+ 00C6 86B9              out 0x6,R24
+ 00C8                   .dbline 113
+ 00C8           ;       ADCSRA&=~(1<<ADPS1);  //时钟分频系数为64
+ 00C8 3198              cbi 0x6,1
+ 00CA                   .dbline 114
+ 00CA           ;       ADCSRA|=(1<<ADEN);//使能AD
+ 00CA 379A              sbi 0x6,7
+ 00CC                   .dbline 115
+ 00CC           ;       ADCSRA&=~(1<<ADATE);//不自动转换
+ 00CC 3598              cbi 0x6,5
+ 00CE                   .dbline 116
+ 00CE           ;       ADCSRA&=~(1<<ADIE);//禁用AD中断
+ 00CE 3398              cbi 0x6,3
+ 00D0                   .dbline -2
+ 00D0           L9:
+ 00D0                   .dbline 0 ; func end
+ 00D0 0895              ret
+ 00D2                   .dbend
+                        .area vector(rom, abs)
+                        .org 36
+ 0024 0C946900          jmp _timer0_ovf_isr
+                        .area text(rom, con, rel)
+ 00D2                   .dbfile E:\avr\iccavrproject\电池容量测试\main.c
+ 00D2                   .dbfunc e timer0_ovf_isr _timer0_ovf_isr fV
+                        .even
+ 00D2           _timer0_ovf_isr::
+ 00D2 0E940000          xcall push_lset
+ 00D6 2997              sbiw R28,9
+ 00D8                   .dbline -1
+ 00D8                   .dbline 120
+ 00D8           ; }
+ 00D8           ; #pragma interrupt_handler timer0_ovf_isr:10 
+ 00D8           ; void timer0_ovf_isr(void) //定时器溢出中断程序,大约49*8机器周期中断一次
+ 00D8           ; {
+ 00D8                   .dbline 122
+ 00D8           ;   //TCNT0 = 0x3A; //从新调入初始值
+ 00D8           ;   TCNT0=0xCF;
+ 00D8 8FEC              ldi R24,207
+ 00DA 82BF              out 0x32,R24
+ 00DC                   .dbline 123
+ 00DC           ;   secondcount++;
+ 00DC 80918F00          lds R24,_secondcount
+ 00E0 90919000          lds R25,_secondcount+1
+ 00E4 0196              adiw R24,1
+ 00E6 90939000          sts _secondcount+1,R25
+ 00EA 80938F00          sts _secondcount,R24
+ 00EE                   .dbline 124
+ 00EE           ;   if(rotate_key==1)//如果开始测量容量，记时，开始计算容量
+ 00EE 80910500          lds R24,_rotate_key
+ 00F2 8130              cpi R24,1
+ 00F4 09F0              breq X0
+ 00F6 5CC1              xjmp L11
+ 00F8           X0:
+ 00F8                   .dbline 125
+ 00F8           ;   if(secondcount>10933){//大约一秒，可能还要调一下
+ 00F8 85EB              ldi R24,10933
+ 00FA 9AE2              ldi R25,42
+ 00FC 20908F00          lds R2,_secondcount
+ 0100 30909000          lds R3,_secondcount+1
+ 0104 8215              cp R24,R2
+ 0106 9305              cpc R25,R3
+ 0108 08F0              brlo X1
+ 010A 52C1              xjmp L13
+ 010C           X1:
+ 010C                   .dbline 125
+ 010C                   .dbline 126
+ 010C           ;     secondcount=0;
+ 010C 2224              clr R2
+ 010E 3324              clr R3
+ 0110 30929000          sts _secondcount+1,R3
+ 0114 20928F00          sts _secondcount,R2
+ 0118                   .dbline 127
+ 0118           ;       second++;
+ 0118 80919100          lds R24,_second
+ 011C 8F5F              subi R24,255    ; addi 1
+ 011E 80939100          sts _second,R24
+ 0122                   .dbline 128
+ 0122           ;       if(second>59){
+ 0122 8BE3              ldi R24,59
+ 0124 20909100          lds R2,_second
+ 0128 8215              cp R24,R2
+ 012A 80F5              brsh L15
+ 012C                   .dbline 128
+ 012C                   .dbline 129
+ 012C           ;         second=0;minute++;
+ 012C 2224              clr R2
+ 012E 20929100          sts _second,R2
+ 0132                   .dbline 129
+ 0132 80919200          lds R24,_minute
+ 0136 8F5F              subi R24,255    ; addi 1
+ 0138 80939200          sts _minute,R24
+ 013C                   .dbline 130
+ 013C           ;         if(minute % 2 == 0){ //两分钟记录一次，最多记256分钟，4小时16分
+ 013C 12E0              ldi R17,2
+ 013E 082F              mov R16,R24
+ 0140 0E940000          xcall mod8u
+ 0144 0023              tst R16
+ 0146 11F5              brne L17
+ 0148                   .dbline 130
+ 0148                   .dbline 131
+ 0148           ;           adccurv[adccurvcount]=63-(unsigned char)(adccap/16);
+ 0148 20900A00          lds R2,_adccap
+ 014C 30900B00          lds R3,_adccap+1
+ 0150 3694              lsr R3
+ 0152 2794              ror R2
+ 0154 3694              lsr R3
+ 0156 2794              ror R2
+ 0158 3694              lsr R3
+ 015A 2794              ror R2
+ 015C 3694              lsr R3
+ 015E 2794              ror R2
+ 0160 8FE3              ldi R24,63
+ 0162 8219              sub R24,R2
+ 0164 E0E0              ldi R30,<_adccurv
+ 0166 F0E0              ldi R31,>_adccurv
+ 0168 A0910200          lds R26,_adccurvcount
+ 016C BB27              clr R27
+ 016E AE0F              add R26,R30
+ 0170 BF1F              adc R27,R31
+ 0172 8C93              st x,R24
+ 0174                   .dbline 132
+ 0174           ;           adccurvcount++;
+ 0174 80910200          lds R24,_adccurvcount
+ 0178 8F5F              subi R24,255    ; addi 1
+ 017A 80930200          sts _adccurvcount,R24
+ 017E                   .dbline 133
+ 017E           ;               if(adccurvcount>127)adccurvcount=127;
+ 017E 8FE7              ldi R24,127
+ 0180 20900200          lds R2,_adccurvcount
+ 0184 8215              cp R24,R2
+ 0186 10F4              brsh L19
+ 0188                   .dbline 133
+ 0188 80930200          sts _adccurvcount,R24
+ 018C           L19:
+ 018C                   .dbline 134
+ 018C           ;         }     
+ 018C           L17:
+ 018C                   .dbline 135
+ 018C           ;       }
+ 018C           L15:
+ 018C                   .dbline 136
+ 018C           ;       if(minute>59){
+ 018C 8BE3              ldi R24,59
+ 018E 20909200          lds R2,_minute
+ 0192 8215              cp R24,R2
+ 0194 40F4              brsh L21
+ 0196                   .dbline 136
+ 0196                   .dbline 137
+ 0196           ;         minute=0;hour++;
+ 0196 2224              clr R2
+ 0198 20929200          sts _minute,R2
+ 019C                   .dbline 137
+ 019C 80919300          lds R24,_hour
+ 01A0 8F5F              subi R24,255    ; addi 1
+ 01A2 80939300          sts _hour,R24
+ 01A6                   .dbline 138
+ 01A6           ;       }
+ 01A6           L21:
+ 01A6                   .dbline 140
+ 01A6           ;       //adccap来自前一次测试时的电压，电压/电阻等于电流，每一秒累加电流*时间等于mAh
+ 01A6           ;       cap+=(((float)adccap*2.0*2.56*1000.0)/1024.0)/6.8; //ma,计算mAs
+ 01A6 40908900          lds R4,_cap+2
+ 01AA 50908A00          lds R5,_cap+2+1
+ 01AE 20908700          lds R2,_cap
+ 01B2 30908800          lds R3,_cap+1
+ 01B6 5A92              st -y,R5
+ 01B8 4A92              st -y,R4
+ 01BA 3A92              st -y,R3
+ 01BC 2A92              st -y,R2
+ 01BE 00E0              ldi R16,<L23
+ 01C0 10E0              ldi R17,>L23
+ 01C2 0E940000          xcall lpm32
+ 01C6 3A93              st -y,R19
+ 01C8 2A93              st -y,R18
+ 01CA 1A93              st -y,R17
+ 01CC 0A93              st -y,R16
+ 01CE 00E0              ldi R16,<L24
+ 01D0 10E0              ldi R17,>L24
+ 01D2 0E940000          xcall lpm32
+ 01D6 3A93              st -y,R19
+ 01D8 2A93              st -y,R18
+ 01DA 1A93              st -y,R17
+ 01DC 0A93              st -y,R16
+ 01DE 00E0              ldi R16,<L25
+ 01E0 10E0              ldi R17,>L25
+ 01E2 0E940000          xcall lpm32
+ 01E6 3A93              st -y,R19
+ 01E8 2A93              st -y,R18
+ 01EA 1A93              st -y,R17
+ 01EC 0A93              st -y,R16
+ 01EE 00E0              ldi R16,<L26
+ 01F0 10E0              ldi R17,>L26
+ 01F2 0E940000          xcall lpm32
+ 01F6 3A93              st -y,R19
+ 01F8 2A93              st -y,R18
+ 01FA 1A93              st -y,R17
+ 01FC 0A93              st -y,R16
+ 01FE 00910A00          lds R16,_adccap
+ 0202 10910B00          lds R17,_adccap+1
+ 0206 1695              lsr R17
+ 0208 0795              ror R16
+ 020A 0E940000          xcall int2fp
+ 020E 3A93              st -y,R19
+ 0210 2A93              st -y,R18
+ 0212 1A93              st -y,R17
+ 0214 0A93              st -y,R16
+ 0216 0E940000          xcall empy32fs
+ 021A 00910A00          lds R16,_adccap
+ 021E 10910B00          lds R17,_adccap+1
+ 0222 0170              andi R16,1
+ 0224 1070              andi R17,0
+ 0226 0E940000          xcall int2fp
+ 022A 3A93              st -y,R19
+ 022C 2A93              st -y,R18
+ 022E 1A93              st -y,R17
+ 0230 0A93              st -y,R16
+ 0232 0E940000          xcall add32fs
+ 0236 0E940000          xcall empy32fs
+ 023A 0E940000          xcall empy32fs
+ 023E 0E940000          xcall empy32fs
+ 0242 00E0              ldi R16,<L27
+ 0244 10E0              ldi R17,>L27
+ 0246 0E940000          xcall lpm32
+ 024A 3A93              st -y,R19
+ 024C 2A93              st -y,R18
+ 024E 1A93              st -y,R17
+ 0250 0A93              st -y,R16
+ 0252 0E940000          xcall div32fs
+ 0256 00E0              ldi R16,<L28
+ 0258 10E0              ldi R17,>L28
+ 025A 0E940000          xcall lpm32
+ 025E 3A93              st -y,R19
+ 0260 2A93              st -y,R18
+ 0262 1A93              st -y,R17
+ 0264 0A93              st -y,R16
+ 0266 0E940000          xcall div32fs
+ 026A 0E940000          xcall add32f
+ 026E 10938800          sts _cap+1,R17
+ 0272 00938700          sts _cap,R16
+ 0276 30938A00          sts _cap+2+1,R19
+ 027A 20938900          sts _cap+2,R18
+ 027E                   .dbline 141
+ 027E           ;       pcap+=(((float)adccap*2.0*2.56*100.0)/1024.0)*(((float)adccap*2.0*2.56*10.0)/1024.0)/6.8; //ma,计算mWs      
+ 027E 00E0              ldi R16,<L24
+ 0280 10E0              ldi R17,>L24
+ 0282 0E940000          xcall lpm32
+ 0286 3A93              st -y,R19
+ 0288 2A93              st -y,R18
+ 028A 1A93              st -y,R17
+ 028C 0A93              st -y,R16
+ 028E 00E0              ldi R16,<L25
+ 0290 10E0              ldi R17,>L25
+ 0292 0E940000          xcall lpm32
+ 0296 3A93              st -y,R19
+ 0298 2A93              st -y,R18
+ 029A 1A93              st -y,R17
+ 029C 0A93              st -y,R16
+ 029E 00E0              ldi R16,<L26
+ 02A0 10E0              ldi R17,>L26
+ 02A2 0E940000          xcall lpm32
+ 02A6 3A93              st -y,R19
+ 02A8 2A93              st -y,R18
+ 02AA 1A93              st -y,R17
+ 02AC 0A93              st -y,R16
+ 02AE 00910A00          lds R16,_adccap
+ 02B2 10910B00          lds R17,_adccap+1
+ 02B6 1695              lsr R17
+ 02B8 0795              ror R16
+ 02BA 0E940000          xcall int2fp
+ 02BE 3A93              st -y,R19
+ 02C0 2A93              st -y,R18
+ 02C2 1A93              st -y,R17
+ 02C4 0A93              st -y,R16
+ 02C6 0E940000          xcall empy32fs
+ 02CA 00910A00          lds R16,_adccap
+ 02CE 10910B00          lds R17,_adccap+1
+ 02D2 0170              andi R16,1
+ 02D4 1070              andi R17,0
+ 02D6 0E940000          xcall int2fp
+ 02DA 3A93              st -y,R19
+ 02DC 2A93              st -y,R18
+ 02DE 1A93              st -y,R17
+ 02E0 0A93              st -y,R16
+ 02E2 0E940000          xcall add32fs
+ 02E6 0E940000          xcall empy32fs
+ 02EA 0E940000          xcall empy32f
+ 02EE FE01              movw R30,R28
+ 02F0 0583              std z+5,R16
+ 02F2 1683              std z+6,R17
+ 02F4 2783              std z+7,R18
+ 02F6 3087              std z+8,R19
+ 02F8 40908500          lds R4,_pcap+2
+ 02FC 50908600          lds R5,_pcap+2+1
+ 0300 20908300          lds R2,_pcap
+ 0304 30908400          lds R3,_pcap+1
+ 0308 5A92              st -y,R5
+ 030A 4A92              st -y,R4
+ 030C 3A92              st -y,R3
+ 030E 2A92              st -y,R2
+ 0310 00E0              ldi R16,<L29
+ 0312 10E0              ldi R17,>L29
+ 0314 0E940000          xcall lpm32
+ 0318 3A93              st -y,R19
+ 031A 2A93              st -y,R18
+ 031C 1A93              st -y,R17
+ 031E 0A93              st -y,R16
+ 0320 FE01              movw R30,R28
+ 0322            ; stack offset 8
+ 0322 2584              ldd R2,z+13
+ 0324 3684              ldd R3,z+14
+ 0326 4784              ldd R4,z+15
+ 0328 5088              ldd R5,z+16
+ 032A 5A92              st -y,R5
+ 032C 4A92              st -y,R4
+ 032E 3A92              st -y,R3
+ 0330 2A92              st -y,R2
+ 0332 0E940000          xcall empy32fs
+ 0336 00E0              ldi R16,<L27
+ 0338 10E0              ldi R17,>L27
+ 033A 0E940000          xcall lpm32
+ 033E 3A93              st -y,R19
+ 0340 2A93              st -y,R18
+ 0342 1A93              st -y,R17
+ 0344 0A93              st -y,R16
+ 0346 0E940000          xcall div32fs
+ 034A 00E0              ldi R16,<L30
+ 034C 10E0              ldi R17,>L30
+ 034E 0E940000          xcall lpm32
+ 0352 3A93              st -y,R19
+ 0354 2A93              st -y,R18
+ 0356 1A93              st -y,R17
+ 0358 0A93              st -y,R16
+ 035A FE01              movw R30,R28
+ 035C            ; stack offset 12
+ 035C 2188              ldd R2,z+17
+ 035E 3288              ldd R3,z+18
+ 0360 4388              ldd R4,z+19
+ 0362 5488              ldd R5,z+20
+ 0364 5A92              st -y,R5
+ 0366 4A92              st -y,R4
+ 0368 3A92              st -y,R3
+ 036A 2A92              st -y,R2
+ 036C 0E940000          xcall empy32fs
+ 0370 00E0              ldi R16,<L27
+ 0372 10E0              ldi R17,>L27
+ 0374 0E940000          xcall lpm32
+ 0378 3A93              st -y,R19
+ 037A 2A93              st -y,R18
+ 037C 1A93              st -y,R17
+ 037E 0A93              st -y,R16
+ 0380 0E940000          xcall div32fs
+ 0384 0E940000          xcall empy32fs
+ 0388 00E0              ldi R16,<L28
+ 038A 10E0              ldi R17,>L28
+ 038C 0E940000          xcall lpm32
+ 0390 3A93              st -y,R19
+ 0392 2A93              st -y,R18
+ 0394 1A93              st -y,R17
+ 0396 0A93              st -y,R16
+ 0398 0E940000          xcall div32fs
+ 039C 0E940000          xcall add32f
+ 03A0 10938400          sts _pcap+1,R17
+ 03A4 00938300          sts _pcap,R16
+ 03A8 30938600          sts _pcap+2+1,R19
+ 03AC 20938500          sts _pcap+2,R18
+ 03B0                   .dbline 144
+ 03B0           ;       //cap=(((adccap*2.0*2.56/1024.0)/6.8)*1000.0)  //ma
+ 03B0           ;       //    *(hour+minute/60.0+second/3600.0);//hour
+ 03B0           ;   }
+ 03B0           L13:
+ 03B0           L11:
+ 03B0                   .dbline 145
+ 03B0           ;   count++; //每中断一次加1
+ 03B0 8091A200          lds R24,_count
+ 03B4 9091A300          lds R25,_count+1
+ 03B8 0196              adiw R24,1
+ 03BA 9093A300          sts _count+1,R25
+ 03BE 8093A200          sts _count,R24
+ 03C2                   .dbline 146
+ 03C2           ;   if (count>4096) //需要估算时间
+ 03C2 80E0              ldi R24,4096
+ 03C4 90E1              ldi R25,16
+ 03C6 2090A200          lds R2,_count
+ 03CA 3090A300          lds R3,_count+1
+ 03CE 8215              cp R24,R2
+ 03D0 9305              cpc R25,R3
+ 03D2 0CF0              brlt X2
+ 03D4 66C4              xjmp L31
+ 03D6           X2:
+ 03D6                   .dbline 147
+ 03D6           ;   { //AD转换
+ 03D6                   .dbline 149
+ 03D6           ;     
+ 03D6           ;       ADCSRA|=(1<<ADSC);  //启动一次AD转换
+ 03D6 369A              sbi 0x6,6
+ 03D8           L33:
+ 03D8                   .dbline 150
+ 03D8                   .dbline 151
+ 03D8           L34:
+ 03D8                   .dbline 150
+ 03D8           ;       while(!(ADCSRA &(1<<ADIF))){
+ 03D8 349B              sbis 0x6,4
+ 03DA FECF              rjmp L33
+ 03DC                   .dbline 151
+ 03DC           ;       };//ADIF 为1时表示AD转换完成
+ 03DC                   .dbline 152
+ 03DC           ;       adc=ADCL;
+ 03DC 24B0              in R2,0x4
+ 03DE 3324              clr R3
+ 03E0 3092A100          sts _adc+1,R3
+ 03E4 2092A000          sts _adc,R2
+ 03E8                   .dbline 153
+ 03E8           ;       adc|=(int)(ADCH<<8);
+ 03E8 25B0              in R2,0x5
+ 03EA 3324              clr R3
+ 03EC 322C              mov R3,R2
+ 03EE 2224              clr R2
+ 03F0 4090A000          lds R4,_adc
+ 03F4 5090A100          lds R5,_adc+1
+ 03F8 4228              or R4,R2
+ 03FA 5328              or R5,R3
+ 03FC 5092A100          sts _adc+1,R5
+ 0400 4092A000          sts _adc,R4
+ 0404                   .dbline 154
+ 0404           ;       adccap=adc;//随时采集电压用于计算容量
+ 0404 1201              movw R2,R4
+ 0406 30920B00          sts _adccap+1,R3
+ 040A 20920A00          sts _adccap,R2
+ 040E                   .dbline 155
+ 040E           ;       ADCSRA|=(1<<ADIF);
+ 040E 349A              sbi 0x6,4
+ 0410                   .dbline 157
+ 0410           ;       //AD转换结束
+ 0410           ;       if(rotate_key==0)adcnoloadvalue=adc;
+ 0410 20900500          lds R2,_rotate_key
+ 0414 2220              tst R2
+ 0416 29F4              brne L36
+ 0418                   .dbline 157
+ 0418 1201              movw R2,R4
+ 041A 30920100          sts _adcnoloadvalue+1,R3
+ 041E 20920000          sts _adcnoloadvalue,R2
+ 0422           L36:
+ 0422                   .dbline 158
+ 0422           ;       if(rotate_key==1 && firststart==1){
+ 0422 80910500          lds R24,_rotate_key
+ 0426 8130              cpi R24,1
+ 0428 09F0              breq X3
+ 042A B7C0              xjmp L38
+ 042C           X3:
+ 042C 80910400          lds R24,_firststart
+ 0430 8130              cpi R24,1
+ 0432 09F0              breq X4
+ 0434 B2C0              xjmp L38
+ 0436           X4:
+ 0436                   .dbline 158
+ 0436                   .dbline 159
+ 0436           ;         firststart=0;
+ 0436 2224              clr R2
+ 0438 20920400          sts _firststart,R2
+ 043C                   .dbline 160
+ 043C           ;         adcloadvalue=adc;
+ 043C 2090A000          lds R2,_adc
+ 0440 3090A100          lds R3,_adc+1
+ 0444 30920300          sts _adcloadvalue+1,R3
+ 0448 20920200          sts _adcloadvalue,R2
+ 044C                   .dbline 162
+ 044C           ;         //计算内阻,(无载电压-带载电压)/电流
+ 044C           ;         res=(((adcnoloadvalue-adcloadvalue)*2.0*2.56)/1024.0)  //电压差
+ 044C 00E0              ldi R16,<L24
+ 044E 10E0              ldi R17,>L24
+ 0450 0E940000          xcall lpm32
+ 0454 3A93              st -y,R19
+ 0456 2A93              st -y,R18
+ 0458 1A93              st -y,R17
+ 045A 0A93              st -y,R16
+ 045C 00E0              ldi R16,<L25
+ 045E 10E0              ldi R17,>L25
+ 0460 0E940000          xcall lpm32
+ 0464 3A93              st -y,R19
+ 0466 2A93              st -y,R18
+ 0468 1A93              st -y,R17
+ 046A 0A93              st -y,R16
+ 046C 20900200          lds R2,_adcloadvalue
+ 0470 30900300          lds R3,_adcloadvalue+1
+ 0474 00910000          lds R16,_adcnoloadvalue
+ 0478 10910100          lds R17,_adcnoloadvalue+1
+ 047C 0219              sub R16,R2
+ 047E 1309              sbc R17,R3
+ 0480 0E940000          xcall int2fp
+ 0484 3A93              st -y,R19
+ 0486 2A93              st -y,R18
+ 0488 1A93              st -y,R17
+ 048A 0A93              st -y,R16
+ 048C 0E940000          xcall empy32fs
+ 0490 0E940000          xcall empy32fs
+ 0494 00E0              ldi R16,<L27
+ 0496 10E0              ldi R17,>L27
+ 0498 0E940000          xcall lpm32
+ 049C 3A93              st -y,R19
+ 049E 2A93              st -y,R18
+ 04A0 1A93              st -y,R17
+ 04A2 0A93              st -y,R16
+ 04A4 0E940000          xcall div32fs
+ 04A8 00E0              ldi R16,<L24
+ 04AA 10E0              ldi R17,>L24
+ 04AC 0E940000          xcall lpm32
+ 04B0 3A93              st -y,R19
+ 04B2 2A93              st -y,R18
+ 04B4 1A93              st -y,R17
+ 04B6 0A93              st -y,R16
+ 04B8 00E0              ldi R16,<L25
+ 04BA 10E0              ldi R17,>L25
+ 04BC 0E940000          xcall lpm32
+ 04C0 3A93              st -y,R19
+ 04C2 2A93              st -y,R18
+ 04C4 1A93              st -y,R17
+ 04C6 0A93              st -y,R16
+ 04C8 00910200          lds R16,_adcloadvalue
+ 04CC 10910300          lds R17,_adcloadvalue+1
+ 04D0 0E940000          xcall int2fp
+ 04D4 3A93              st -y,R19
+ 04D6 2A93              st -y,R18
+ 04D8 1A93              st -y,R17
+ 04DA 0A93              st -y,R16
+ 04DC 0E940000          xcall empy32fs
+ 04E0 0E940000          xcall empy32fs
+ 04E4 00E0              ldi R16,<L27
+ 04E6 10E0              ldi R17,>L27
+ 04E8 0E940000          xcall lpm32
+ 04EC 3A93              st -y,R19
+ 04EE 2A93              st -y,R18
+ 04F0 1A93              st -y,R17
+ 04F2 0A93              st -y,R16
+ 04F4 0E940000          xcall div32fs
+ 04F8 00E0              ldi R16,<L28
+ 04FA 10E0              ldi R17,>L28
+ 04FC 0E940000          xcall lpm32
+ 0500 3A93              st -y,R19
+ 0502 2A93              st -y,R18
+ 0504 1A93              st -y,R17
+ 0506 0A93              st -y,R16
+ 0508 0E940000          xcall div32fs
+ 050C 0E940000          xcall div32f
+ 0510 10938C00          sts _res+1,R17
+ 0514 00938B00          sts _res,R16
+ 0518 30938E00          sts _res+2+1,R19
+ 051C 20938D00          sts _res+2,R18
+ 0520                   .dbline 164
+ 0520           ;             /((adcloadvalue*2.0*2.56/1024.0)/6.8);//电流，6.8为水泥电阻阻值
+ 0520           ;         cap=0.0;//初始化容量
+ 0520 00E0              ldi R16,<L40
+ 0522 10E0              ldi R17,>L40
+ 0524 0E940000          xcall lpm32
+ 0528 10938800          sts _cap+1,R17
+ 052C 00938700          sts _cap,R16
+ 0530 30938A00          sts _cap+2+1,R19
+ 0534 20938900          sts _cap+2,R18
+ 0538                   .dbline 165
+ 0538           ;         pcap=0.0;       
+ 0538 00E0              ldi R16,<L40
+ 053A 10E0              ldi R17,>L40
+ 053C 0E940000          xcall lpm32
+ 0540 10938400          sts _pcap+1,R17
+ 0544 00938300          sts _pcap,R16
+ 0548 30938600          sts _pcap+2+1,R19
+ 054C 20938500          sts _pcap+2,R18
+ 0550                   .dbline 166
+ 0550 2224              clr R2
+ 0552 3324              clr R3
+ 0554 30920100          sts _i+1,R3
+ 0558 20920000          sts _i,R2
+ 055C 13C0              xjmp L44
+ 055E           L41:
+ 055E                   .dbline 166
+ 055E 80E0              ldi R24,<_adccurv
+ 0560 90E0              ldi R25,>_adccurv
+ 0562 E0910000          lds R30,_i
+ 0566 F0910100          lds R31,_i+1
+ 056A E80F              add R30,R24
+ 056C F91F              adc R31,R25
+ 056E 2224              clr R2
+ 0570 2082              std z+0,R2
+ 0572           L42:
+ 0572                   .dbline 166
+ 0572 80910000          lds R24,_i
+ 0576 90910100          lds R25,_i+1
+ 057A 0196              adiw R24,1
+ 057C 90930100          sts _i+1,R25
+ 0580 80930000          sts _i,R24
+ 0584           L44:
+ 0584                   .dbline 166
+ 0584           ;         for(i=0;i<128;i++)adccurv[i]=0;//初始化曲线
+ 0584 80910000          lds R24,_i
+ 0588 90910100          lds R25,_i+1
+ 058C 8038              cpi R24,128
+ 058E E0E0              ldi R30,0
+ 0590 9E07              cpc R25,R30
+ 0592 28F3              brlo L41
+ 0594                   .dbline 167
+ 0594           ;         adccurvcount=0;
+ 0594 2224              clr R2
+ 0596 20920200          sts _adccurvcount,R2
+ 059A                   .dbline 168
+ 059A           ;       }
+ 059A           L38:
+ 059A                   .dbline 170
+ 059A           ;       //如果电压低于终止电压，停计容量，断继电器
+ 059A           ;       if(adc<stopvalue && rotate_key==1){
+ 059A 20900800          lds R2,_stopvalue
+ 059E 30900900          lds R3,_stopvalue+1
+ 05A2 4090A000          lds R4,_adc
+ 05A6 5090A100          lds R5,_adc+1
+ 05AA 4214              cp R4,R2
+ 05AC 5304              cpc R5,R3
+ 05AE 40F4              brsh L45
+ 05B0 80910500          lds R24,_rotate_key
+ 05B4 8130              cpi R24,1
+ 05B6 21F4              brne L45
+ 05B8                   .dbline 170
+ 05B8                   .dbline 171
+ 05B8           ;         PORTD &=~(1<<7);
+ 05B8 9798              cbi 0x12,7
+ 05BA                   .dbline 172
+ 05BA           ;         rotate_key=0;
+ 05BA 2224              clr R2
+ 05BC 20920500          sts _rotate_key,R2
+ 05C0                   .dbline 173
+ 05C0           ;       }
+ 05C0           L45:
+ 05C0                   .dbline 174
+ 05C0           ;       adcfloat=2.56*adc/1024.0;
+ 05C0 00E0              ldi R16,<L24
+ 05C2 10E0              ldi R17,>L24
+ 05C4 0E940000          xcall lpm32
+ 05C8 3A93              st -y,R19
+ 05CA 2A93              st -y,R18
+ 05CC 1A93              st -y,R17
+ 05CE 0A93              st -y,R16
+ 05D0 0091A000          lds R16,_adc
+ 05D4 1091A100          lds R17,_adc+1
+ 05D8 0E940000          xcall int2fp
+ 05DC 3A93              st -y,R19
+ 05DE 2A93              st -y,R18
+ 05E0 1A93              st -y,R17
+ 05E2 0A93              st -y,R16
+ 05E4 0E940000          xcall empy32fs
+ 05E8 00E0              ldi R16,<L27
+ 05EA 10E0              ldi R17,>L27
+ 05EC 0E940000          xcall lpm32
+ 05F0 3A93              st -y,R19
+ 05F2 2A93              st -y,R18
+ 05F4 1A93              st -y,R17
+ 05F6 0A93              st -y,R16
+ 05F8 0E940000          xcall div32f
+ 05FC 10939D00          sts _adcfloat+1,R17
+ 0600 00939C00          sts _adcfloat,R16
+ 0604 30939F00          sts _adcfloat+2+1,R19
+ 0608 20939E00          sts _adcfloat+2,R18
+ 060C                   .dbline 175
+ 060C           ;       adcfloat=adcfloat*2;//真实电路中电压被分压1/2
+ 060C 00E0              ldi R16,<L47
+ 060E 10E0              ldi R17,>L47
+ 0610 0E940000          xcall lpm32
+ 0614 3A93              st -y,R19
+ 0616 2A93              st -y,R18
+ 0618 1A93              st -y,R17
+ 061A 0A93              st -y,R16
+ 061C 40909E00          lds R4,_adcfloat+2
+ 0620 50909F00          lds R5,_adcfloat+2+1
+ 0624 20909C00          lds R2,_adcfloat
+ 0628 30909D00          lds R3,_adcfloat+1
+ 062C 5A92              st -y,R5
+ 062E 4A92              st -y,R4
+ 0630 3A92              st -y,R3
+ 0632 2A92              st -y,R2
+ 0634 0E940000          xcall empy32f
+ 0638 10939D00          sts _adcfloat+1,R17
+ 063C 00939C00          sts _adcfloat,R16
+ 0640 30939F00          sts _adcfloat+2+1,R19
+ 0644 20939E00          sts _adcfloat+2,R18
+ 0648                   .dbline 177
+ 0648           ;       
+ 0648           ;       Float2Str(adcbuffer,adcfloat,1,3);//格式化成为字符串
+ 0648 83E0              ldi R24,3
+ 064A 8C83              std y+4,R24
+ 064C 81E0              ldi R24,1
+ 064E 8A83              std y+2,R24
+ 0650 2883              std y+0,R18
+ 0652 3983              std y+1,R19
+ 0654 9801              movw R18,R16
+ 0656 00E0              ldi R16,<_adcbuffer
+ 0658 10E0              ldi R17,>_adcbuffer
+ 065A 0E940000          xcall _Float2Str
+ 065E                   .dbline 179
+ 065E           ;        
+ 065E           ;       glcdhalf=0;
+ 065E 2224              clr R2
+ 0660 20920000          sts _glcdhalf,R2
+ 0664                   .dbline 180
+ 0664           ;       glcd_fillScreen(0);
+ 0664 0027              clr R16
+ 0666 0E940000          xcall _glcd_fillScreen
+ 066A                   .dbline 182
+ 066A           ;       //当前电压
+ 066A           ;       glcd_text57(2,2,adcbuffer,2,1);
+ 066A 81E0              ldi R24,1
+ 066C 8C83              std y+4,R24
+ 066E 82E0              ldi R24,2
+ 0670 8A83              std y+2,R24
+ 0672 80E0              ldi R24,<_adcbuffer
+ 0674 90E0              ldi R25,>_adcbuffer
+ 0676 9983              std y+1,R25
+ 0678 8883              std y+0,R24
+ 067A 22E0              ldi R18,2
+ 067C 02E0              ldi R16,2
+ 067E 0E940000          xcall _glcd_text57
+ 0682                   .dbline 184
+ 0682           ;       //是否开始，如果已经开始测容量显示stop
+ 0682           ;       if(rotate_key==1)
+ 0682 80910500          lds R24,_rotate_key
+ 0686 8130              cpi R24,1
+ 0688 61F4              brne L48
+ 068A                   .dbline 185
+ 068A           ;         glcd_text57(96,2,"stop",1,1);
+ 068A 81E0              ldi R24,1
+ 068C 8C83              std y+4,R24
+ 068E 8A83              std y+2,R24
+ 0690 80E0              ldi R24,<L50
+ 0692 90E0              ldi R25,>L50
+ 0694 9983              std y+1,R25
+ 0696 8883              std y+0,R24
+ 0698 22E0              ldi R18,2
+ 069A 00E6              ldi R16,96
+ 069C 0E940000          xcall _glcd_text57
+ 06A0 0BC0              xjmp L49
+ 06A2           L48:
+ 06A2                   .dbline 187
+ 06A2           ;       else
+ 06A2           ;         glcd_text57(96,2,"start",1,1);  
+ 06A2 81E0              ldi R24,1
+ 06A4 8C83              std y+4,R24
+ 06A6 8A83              std y+2,R24
+ 06A8 80E0              ldi R24,<L51
+ 06AA 90E0              ldi R25,>L51
+ 06AC 9983              std y+1,R25
+ 06AE 8883              std y+0,R24
+ 06B0 22E0              ldi R18,2
+ 06B2 00E6              ldi R16,96
+ 06B4 0E940000          xcall _glcd_text57
+ 06B8           L49:
+ 06B8                   .dbline 189
+ 06B8           ;       //时钟
+ 06B8           ;       Num2Str(adcbuffer,hour,2);
+ 06B8 82E0              ldi R24,2
+ 06BA 8883              std y+0,R24
+ 06BC 20919300          lds R18,_hour
+ 06C0 3327              clr R19
+ 06C2 00E0              ldi R16,<_adcbuffer
+ 06C4 10E0              ldi R17,>_adcbuffer
+ 06C6 0E940000          xcall _Num2Str
+ 06CA                   .dbline 190
+ 06CA           ;       glcd_text57(80,12,adcbuffer,1,1);
+ 06CA 81E0              ldi R24,1
+ 06CC 8C83              std y+4,R24
+ 06CE 8A83              std y+2,R24
+ 06D0 80E0              ldi R24,<_adcbuffer
+ 06D2 90E0              ldi R25,>_adcbuffer
+ 06D4 9983              std y+1,R25
+ 06D6 8883              std y+0,R24
+ 06D8 2CE0              ldi R18,12
+ 06DA 00E5              ldi R16,80
+ 06DC 0E940000          xcall _glcd_text57
+ 06E0                   .dbline 191
+ 06E0           ;       glcd_text57(92,12,":",1,1);
+ 06E0 81E0              ldi R24,1
+ 06E2 8C83              std y+4,R24
+ 06E4 8A83              std y+2,R24
+ 06E6 80E0              ldi R24,<L52
+ 06E8 90E0              ldi R25,>L52
+ 06EA 9983              std y+1,R25
+ 06EC 8883              std y+0,R24
+ 06EE 2CE0              ldi R18,12
+ 06F0 0CE5              ldi R16,92
+ 06F2 0E940000          xcall _glcd_text57
+ 06F6                   .dbline 192
+ 06F6           ;       Num2Str(adcbuffer,minute,2);
+ 06F6 82E0              ldi R24,2
+ 06F8 8883              std y+0,R24
+ 06FA 20919200          lds R18,_minute
+ 06FE 3327              clr R19
+ 0700 00E0              ldi R16,<_adcbuffer
+ 0702 10E0              ldi R17,>_adcbuffer
+ 0704 0E940000          xcall _Num2Str
+ 0708                   .dbline 193
+ 0708           ;       glcd_text57(98,12,adcbuffer,1,1);
+ 0708 81E0              ldi R24,1
+ 070A 8C83              std y+4,R24
+ 070C 8A83              std y+2,R24
+ 070E 80E0              ldi R24,<_adcbuffer
+ 0710 90E0              ldi R25,>_adcbuffer
+ 0712 9983              std y+1,R25
+ 0714 8883              std y+0,R24
+ 0716 2CE0              ldi R18,12
+ 0718 02E6              ldi R16,98
+ 071A 0E940000          xcall _glcd_text57
+ 071E                   .dbline 194
+ 071E           ;       glcd_text57(110,12,":",1,1);
+ 071E 81E0              ldi R24,1
+ 0720 8C83              std y+4,R24
+ 0722 8A83              std y+2,R24
+ 0724 80E0              ldi R24,<L52
+ 0726 90E0              ldi R25,>L52
+ 0728 9983              std y+1,R25
+ 072A 8883              std y+0,R24
+ 072C 2CE0              ldi R18,12
+ 072E 0EE6              ldi R16,110
+ 0730 0E940000          xcall _glcd_text57
+ 0734                   .dbline 195
+ 0734           ;       Num2Str(adcbuffer,second,2);
+ 0734 82E0              ldi R24,2
+ 0736 8883              std y+0,R24
+ 0738 20919100          lds R18,_second
+ 073C 3327              clr R19
+ 073E 00E0              ldi R16,<_adcbuffer
+ 0740 10E0              ldi R17,>_adcbuffer
+ 0742 0E940000          xcall _Num2Str
+ 0746                   .dbline 196
+ 0746           ;       glcd_text57(116,12,adcbuffer,1,1);
+ 0746 81E0              ldi R24,1
+ 0748 8C83              std y+4,R24
+ 074A 8A83              std y+2,R24
+ 074C 80E0              ldi R24,<_adcbuffer
+ 074E 90E0              ldi R25,>_adcbuffer
+ 0750 9983              std y+1,R25
+ 0752 8883              std y+0,R24
+ 0754 2CE0              ldi R18,12
+ 0756 04E7              ldi R16,116
+ 0758 0E940000          xcall _glcd_text57
+ 075C                   .dbline 199
+ 075C           ;       //时钟end
+ 075C           ;       //终止电压
+ 075C           ;       adcfloat=2.56*stopvalue/1024.0;
+ 075C 00E0              ldi R16,<L24
+ 075E 10E0              ldi R17,>L24
+ 0760 0E940000          xcall lpm32
+ 0764 3A93              st -y,R19
+ 0766 2A93              st -y,R18
+ 0768 1A93              st -y,R17
+ 076A 0A93              st -y,R16
+ 076C 00E0              ldi R16,<L26
+ 076E 10E0              ldi R17,>L26
+ 0770 0E940000          xcall lpm32
+ 0774 3A93              st -y,R19
+ 0776 2A93              st -y,R18
+ 0778 1A93              st -y,R17
+ 077A 0A93              st -y,R16
+ 077C 00910800          lds R16,_stopvalue
+ 0780 10910900          lds R17,_stopvalue+1
+ 0784 1695              lsr R17
+ 0786 0795              ror R16
+ 0788 0E940000          xcall int2fp
+ 078C 3A93              st -y,R19
+ 078E 2A93              st -y,R18
+ 0790 1A93              st -y,R17
+ 0792 0A93              st -y,R16
+ 0794 0E940000          xcall empy32fs
+ 0798 00910800          lds R16,_stopvalue
+ 079C 10910900          lds R17,_stopvalue+1
+ 07A0 0170              andi R16,1
+ 07A2 1070              andi R17,0
+ 07A4 0E940000          xcall int2fp
+ 07A8 3A93              st -y,R19
+ 07AA 2A93              st -y,R18
+ 07AC 1A93              st -y,R17
+ 07AE 0A93              st -y,R16
+ 07B0 0E940000          xcall add32fs
+ 07B4 0E940000          xcall empy32fs
+ 07B8 00E0              ldi R16,<L27
+ 07BA 10E0              ldi R17,>L27
+ 07BC 0E940000          xcall lpm32
+ 07C0 3A93              st -y,R19
+ 07C2 2A93              st -y,R18
+ 07C4 1A93              st -y,R17
+ 07C6 0A93              st -y,R16
+ 07C8 0E940000          xcall div32f
+ 07CC 10939D00          sts _adcfloat+1,R17
+ 07D0 00939C00          sts _adcfloat,R16
+ 07D4 30939F00          sts _adcfloat+2+1,R19
+ 07D8 20939E00          sts _adcfloat+2,R18
+ 07DC                   .dbline 200
+ 07DC           ;       adcfloat=adcfloat*2;//真实电路中电压被分压1/2
+ 07DC 00E0              ldi R16,<L47
+ 07DE 10E0              ldi R17,>L47
+ 07E0 0E940000          xcall lpm32
+ 07E4 3A93              st -y,R19
+ 07E6 2A93              st -y,R18
+ 07E8 1A93              st -y,R17
+ 07EA 0A93              st -y,R16
+ 07EC 40909E00          lds R4,_adcfloat+2
+ 07F0 50909F00          lds R5,_adcfloat+2+1
+ 07F4 20909C00          lds R2,_adcfloat
+ 07F8 30909D00          lds R3,_adcfloat+1
+ 07FC 5A92              st -y,R5
+ 07FE 4A92              st -y,R4
+ 0800 3A92              st -y,R3
+ 0802 2A92              st -y,R2
+ 0804 0E940000          xcall empy32f
+ 0808 10939D00          sts _adcfloat+1,R17
+ 080C 00939C00          sts _adcfloat,R16
+ 0810 30939F00          sts _adcfloat+2+1,R19
+ 0814 20939E00          sts _adcfloat+2,R18
+ 0818                   .dbline 201
+ 0818           ;       Float2Str(adcbuffer,adcfloat,1,3);
+ 0818 83E0              ldi R24,3
+ 081A 8C83              std y+4,R24
+ 081C 81E0              ldi R24,1
+ 081E 8A83              std y+2,R24
+ 0820 2883              std y+0,R18
+ 0822 3983              std y+1,R19
+ 0824 9801              movw R18,R16
+ 0826 00E0              ldi R16,<_adcbuffer
+ 0828 10E0              ldi R17,>_adcbuffer
+ 082A 0E940000          xcall _Float2Str
+ 082E                   .dbline 202
+ 082E           ;       glcd_text57(96,24,adcbuffer,1,1);
+ 082E 81E0              ldi R24,1
+ 0830 8C83              std y+4,R24
+ 0832 8A83              std y+2,R24
+ 0834 80E0              ldi R24,<_adcbuffer
+ 0836 90E0              ldi R25,>_adcbuffer
+ 0838 9983              std y+1,R25
+ 083A 8883              std y+0,R24
+ 083C 28E1              ldi R18,24
+ 083E 00E6              ldi R16,96
+ 0840 0E940000          xcall _glcd_text57
+ 0844                   .dbline 205
+ 0844           ;       //终止电压end
+ 0844           ;       //内阻
+ 0844           ;       Float2Str(adcbuffer,res,1,3);
+ 0844 83E0              ldi R24,3
+ 0846 8C83              std y+4,R24
+ 0848 81E0              ldi R24,1
+ 084A 8A83              std y+2,R24
+ 084C 40908D00          lds R4,_res+2
+ 0850 50908E00          lds R5,_res+2+1
+ 0854 20908B00          lds R2,_res
+ 0858 30908C00          lds R3,_res+1
+ 085C 4882              std y+0,R4
+ 085E 5982              std y+1,R5
+ 0860 9101              movw R18,R2
+ 0862 00E0              ldi R16,<_adcbuffer
+ 0864 10E0              ldi R17,>_adcbuffer
+ 0866 0E940000          xcall _Float2Str
+ 086A                   .dbline 206
+ 086A           ;       glcd_text57(2,18,adcbuffer,2,1);
+ 086A 81E0              ldi R24,1
+ 086C 8C83              std y+4,R24
+ 086E 82E0              ldi R24,2
+ 0870 8A83              std y+2,R24
+ 0872 80E0              ldi R24,<_adcbuffer
+ 0874 90E0              ldi R25,>_adcbuffer
+ 0876 9983              std y+1,R25
+ 0878 8883              std y+0,R24
+ 087A 22E1              ldi R18,18
+ 087C 02E0              ldi R16,2
+ 087E 0E940000          xcall _glcd_text57
+ 0882                   .dbline 207
+ 0882           ;       glcd_text57(60,23,"R",1,1);
+ 0882 81E0              ldi R24,1
+ 0884 8C83              std y+4,R24
+ 0886 8A83              std y+2,R24
+ 0888 80E0              ldi R24,<L53
+ 088A 90E0              ldi R25,>L53
+ 088C 9983              std y+1,R25
+ 088E 8883              std y+0,R24
+ 0890 27E1              ldi R18,23
+ 0892 0CE3              ldi R16,60
+ 0894 0E940000          xcall _glcd_text57
+ 0898                   .dbline 210
+ 0898           ;       //内阻end
+ 0898           ;       //容量
+ 0898           ;       Float2Str(adcbuffer,cap/3600.0,5,1);
+ 0898 81E0              ldi R24,1
+ 089A 8C83              std y+4,R24
+ 089C 85E0              ldi R24,5
+ 089E 8A83              std y+2,R24
+ 08A0 40908900          lds R4,_cap+2
+ 08A4 50908A00          lds R5,_cap+2+1
+ 08A8 20908700          lds R2,_cap
+ 08AC 30908800          lds R3,_cap+1
+ 08B0 5A92              st -y,R5
+ 08B2 4A92              st -y,R4
+ 08B4 3A92              st -y,R3
+ 08B6 2A92              st -y,R2
+ 08B8 00E0              ldi R16,<L54
+ 08BA 10E0              ldi R17,>L54
+ 08BC 0E940000          xcall lpm32
+ 08C0 3A93              st -y,R19
+ 08C2 2A93              st -y,R18
+ 08C4 1A93              st -y,R17
+ 08C6 0A93              st -y,R16
+ 08C8 0E940000          xcall div32f
+ 08CC 2883              std y+0,R18
+ 08CE 3983              std y+1,R19
+ 08D0 9801              movw R18,R16
+ 08D2 00E0              ldi R16,<_adcbuffer
+ 08D4 10E0              ldi R17,>_adcbuffer
+ 08D6 0E940000          xcall _Float2Str
+ 08DA                   .dbline 211
+ 08DA           ;       glcd_text57(2,34,adcbuffer,2,1);
+ 08DA 81E0              ldi R24,1
+ 08DC 8C83              std y+4,R24
+ 08DE 82E0              ldi R24,2
+ 08E0 8A83              std y+2,R24
+ 08E2 80E0              ldi R24,<_adcbuffer
+ 08E4 90E0              ldi R25,>_adcbuffer
+ 08E6 9983              std y+1,R25
+ 08E8 8883              std y+0,R24
+ 08EA 22E2              ldi R18,34
+ 08EC 02E0              ldi R16,2
+ 08EE 0E940000          xcall _glcd_text57
+ 08F2                   .dbline 212
+ 08F2           ;       glcd_text57(80,39,"mAh",1,1);
+ 08F2 81E0              ldi R24,1
+ 08F4 8C83              std y+4,R24
+ 08F6 8A83              std y+2,R24
+ 08F8 80E0              ldi R24,<L55
+ 08FA 90E0              ldi R25,>L55
+ 08FC 9983              std y+1,R25
+ 08FE 8883              std y+0,R24
+ 0900 27E2              ldi R18,39
+ 0902 00E5              ldi R16,80
+ 0904 0E940000          xcall _glcd_text57
+ 0908                   .dbline 213
+ 0908           ;       Float2Str(adcbuffer,pcap/3600.0,5,1);
+ 0908 81E0              ldi R24,1
+ 090A 8C83              std y+4,R24
+ 090C 85E0              ldi R24,5
+ 090E 8A83              std y+2,R24
+ 0910 40908500          lds R4,_pcap+2
+ 0914 50908600          lds R5,_pcap+2+1
+ 0918 20908300          lds R2,_pcap
+ 091C 30908400          lds R3,_pcap+1
+ 0920 5A92              st -y,R5
+ 0922 4A92              st -y,R4
+ 0924 3A92              st -y,R3
+ 0926 2A92              st -y,R2
+ 0928 00E0              ldi R16,<L54
+ 092A 10E0              ldi R17,>L54
+ 092C 0E940000          xcall lpm32
+ 0930 3A93              st -y,R19
+ 0932 2A93              st -y,R18
+ 0934 1A93              st -y,R17
+ 0936 0A93              st -y,R16
+ 0938 0E940000          xcall div32f
+ 093C 2883              std y+0,R18
+ 093E 3983              std y+1,R19
+ 0940 9801              movw R18,R16
+ 0942 00E0              ldi R16,<_adcbuffer
+ 0944 10E0              ldi R17,>_adcbuffer
+ 0946 0E940000          xcall _Float2Str
+ 094A                   .dbline 214
+ 094A           ;       glcd_text57(2,52,adcbuffer,1,1);
+ 094A 81E0              ldi R24,1
+ 094C 8C83              std y+4,R24
+ 094E 8A83              std y+2,R24
+ 0950 80E0              ldi R24,<_adcbuffer
+ 0952 90E0              ldi R25,>_adcbuffer
+ 0954 9983              std y+1,R25
+ 0956 8883              std y+0,R24
+ 0958 24E3              ldi R18,52
+ 095A 02E0              ldi R16,2
+ 095C 0E940000          xcall _glcd_text57
+ 0960                   .dbline 215
+ 0960           ;       glcd_text57(80,52,"mWh",1,1);
+ 0960 81E0              ldi R24,1
+ 0962 8C83              std y+4,R24
+ 0964 8A83              std y+2,R24
+ 0966 80E0              ldi R24,<L56
+ 0968 90E0              ldi R25,>L56
+ 096A 9983              std y+1,R25
+ 096C 8883              std y+0,R24
+ 096E 24E3              ldi R18,52
+ 0970 00E5              ldi R16,80
+ 0972 0E940000          xcall _glcd_text57
+ 0976                   .dbline 217
+ 0976 2224              clr R2
+ 0978 3324              clr R3
+ 097A 30920100          sts _i+1,R3
+ 097E 20920000          sts _i,R2
+ 0982 18C0              xjmp L60
+ 0984           L57:
+ 0984                   .dbline 217
+ 0984                   .dbline 218
+ 0984 81E0              ldi R24,1
+ 0986 8883              std y+0,R24
+ 0988 80E0              ldi R24,<_adccurv
+ 098A 90E0              ldi R25,>_adccurv
+ 098C E0910000          lds R30,_i
+ 0990 F0910100          lds R31,_i+1
+ 0994 E80F              add R30,R24
+ 0996 F91F              adc R31,R25
+ 0998 2081              ldd R18,z+0
+ 099A 00910000          lds R16,_i
+ 099E 0E940000          xcall _glcd_pixel
+ 09A2                   .dbline 219
+ 09A2           L58:
+ 09A2                   .dbline 217
+ 09A2 80910000          lds R24,_i
+ 09A6 90910100          lds R25,_i+1
+ 09AA 0196              adiw R24,1
+ 09AC 90930100          sts _i+1,R25
+ 09B0 80930000          sts _i,R24
+ 09B4           L60:
+ 09B4                   .dbline 217
+ 09B4           ;       //容量end
+ 09B4           ;       for(i=0;i<adccurvcount;i++){
+ 09B4 20900200          lds R2,_adccurvcount
+ 09B8 3324              clr R3
+ 09BA 40900000          lds R4,_i
+ 09BE 50900100          lds R5,_i+1
+ 09C2 4214              cp R4,R2
+ 09C4 5304              cpc R5,R3
+ 09C6 F0F2              brlo L57
+ 09C8                   .dbline 221
+ 09C8           ;         glcd_pixel(i,adccurv[i],1);
+ 09C8           ;       }
+ 09C8           ;       //glcd_line(1,1,64,63,1);
+ 09C8           ;       glcd_update();
+ 09C8 0E940000          xcall _glcd_update
+ 09CC                   .dbline 222
+ 09CC           ;       glcdhalf=1;
+ 09CC 81E0              ldi R24,1
+ 09CE 80930000          sts _glcdhalf,R24
+ 09D2                   .dbline 223
+ 09D2           ;       glcd_fillScreen(0);
+ 09D2 0027              clr R16
+ 09D4 0E940000          xcall _glcd_fillScreen
+ 09D8                   .dbline 224
+ 09D8           ;       glcd_text57(2,2,adcbuffer,2,1);
+ 09D8 81E0              ldi R24,1
+ 09DA 8C83              std y+4,R24
+ 09DC 82E0              ldi R24,2
+ 09DE 8A83              std y+2,R24
+ 09E0 80E0              ldi R24,<_adcbuffer
+ 09E2 90E0              ldi R25,>_adcbuffer
+ 09E4 9983              std y+1,R25
+ 09E6 8883              std y+0,R24
+ 09E8 22E0              ldi R18,2
+ 09EA 02E0              ldi R16,2
+ 09EC 0E940000          xcall _glcd_text57
+ 09F0                   .dbline 225
+ 09F0           ;       if(rotate_key==1)
+ 09F0 80910500          lds R24,_rotate_key
+ 09F4 8130              cpi R24,1
+ 09F6 61F4              brne L61
+ 09F8                   .dbline 226
+ 09F8           ;         glcd_text57(96,2,"stop",1,1);
+ 09F8 81E0              ldi R24,1
+ 09FA 8C83              std y+4,R24
+ 09FC 8A83              std y+2,R24
+ 09FE 80E0              ldi R24,<L50
+ 0A00 90E0              ldi R25,>L50
+ 0A02 9983              std y+1,R25
+ 0A04 8883              std y+0,R24
+ 0A06 22E0              ldi R18,2
+ 0A08 00E6              ldi R16,96
+ 0A0A 0E940000          xcall _glcd_text57
+ 0A0E 0BC0              xjmp L62
+ 0A10           L61:
+ 0A10                   .dbline 228
+ 0A10           ;       else
+ 0A10           ;         glcd_text57(96,2,"start",1,1);
+ 0A10 81E0              ldi R24,1
+ 0A12 8C83              std y+4,R24
+ 0A14 8A83              std y+2,R24
+ 0A16 80E0              ldi R24,<L51
+ 0A18 90E0              ldi R25,>L51
+ 0A1A 9983              std y+1,R25
+ 0A1C 8883              std y+0,R24
+ 0A1E 22E0              ldi R18,2
+ 0A20 00E6              ldi R16,96
+ 0A22 0E940000          xcall _glcd_text57
+ 0A26           L62:
+ 0A26                   .dbline 230
+ 0A26           ;       //终止电压
+ 0A26           ;       adcfloat=2.56*stopvalue/1024.0;
+ 0A26 00E0              ldi R16,<L24
+ 0A28 10E0              ldi R17,>L24
+ 0A2A 0E940000          xcall lpm32
+ 0A2E 3A93              st -y,R19
+ 0A30 2A93              st -y,R18
+ 0A32 1A93              st -y,R17
+ 0A34 0A93              st -y,R16
+ 0A36 00E0              ldi R16,<L26
+ 0A38 10E0              ldi R17,>L26
+ 0A3A 0E940000          xcall lpm32
+ 0A3E 3A93              st -y,R19
+ 0A40 2A93              st -y,R18
+ 0A42 1A93              st -y,R17
+ 0A44 0A93              st -y,R16
+ 0A46 00910800          lds R16,_stopvalue
+ 0A4A 10910900          lds R17,_stopvalue+1
+ 0A4E 1695              lsr R17
+ 0A50 0795              ror R16
+ 0A52 0E940000          xcall int2fp
+ 0A56 3A93              st -y,R19
+ 0A58 2A93              st -y,R18
+ 0A5A 1A93              st -y,R17
+ 0A5C 0A93              st -y,R16
+ 0A5E 0E940000          xcall empy32fs
+ 0A62 00910800          lds R16,_stopvalue
+ 0A66 10910900          lds R17,_stopvalue+1
+ 0A6A 0170              andi R16,1
+ 0A6C 1070              andi R17,0
+ 0A6E 0E940000          xcall int2fp
+ 0A72 3A93              st -y,R19
+ 0A74 2A93              st -y,R18
+ 0A76 1A93              st -y,R17
+ 0A78 0A93              st -y,R16
+ 0A7A 0E940000          xcall add32fs
+ 0A7E 0E940000          xcall empy32fs
+ 0A82 00E0              ldi R16,<L27
+ 0A84 10E0              ldi R17,>L27
+ 0A86 0E940000          xcall lpm32
+ 0A8A 3A93              st -y,R19
+ 0A8C 2A93              st -y,R18
+ 0A8E 1A93              st -y,R17
+ 0A90 0A93              st -y,R16
+ 0A92 0E940000          xcall div32f
+ 0A96 10939D00          sts _adcfloat+1,R17
+ 0A9A 00939C00          sts _adcfloat,R16
+ 0A9E 30939F00          sts _adcfloat+2+1,R19
+ 0AA2 20939E00          sts _adcfloat+2,R18
+ 0AA6                   .dbline 231
+ 0AA6           ;       adcfloat=adcfloat*2;//真实电路中电压被分压1/2
+ 0AA6 00E0              ldi R16,<L47
+ 0AA8 10E0              ldi R17,>L47
+ 0AAA 0E940000          xcall lpm32
+ 0AAE 3A93              st -y,R19
+ 0AB0 2A93              st -y,R18
+ 0AB2 1A93              st -y,R17
+ 0AB4 0A93              st -y,R16
+ 0AB6 40909E00          lds R4,_adcfloat+2
+ 0ABA 50909F00          lds R5,_adcfloat+2+1
+ 0ABE 20909C00          lds R2,_adcfloat
+ 0AC2 30909D00          lds R3,_adcfloat+1
+ 0AC6 5A92              st -y,R5
+ 0AC8 4A92              st -y,R4
+ 0ACA 3A92              st -y,R3
+ 0ACC 2A92              st -y,R2
+ 0ACE 0E940000          xcall empy32f
+ 0AD2 10939D00          sts _adcfloat+1,R17
+ 0AD6 00939C00          sts _adcfloat,R16
+ 0ADA 30939F00          sts _adcfloat+2+1,R19
+ 0ADE 20939E00          sts _adcfloat+2,R18
+ 0AE2                   .dbline 232
+ 0AE2           ;       Float2Str(adcbuffer,adcfloat,1,3);
+ 0AE2 83E0              ldi R24,3
+ 0AE4 8C83              std y+4,R24
+ 0AE6 81E0              ldi R24,1
+ 0AE8 8A83              std y+2,R24
+ 0AEA 2883              std y+0,R18
+ 0AEC 3983              std y+1,R19
+ 0AEE 9801              movw R18,R16
+ 0AF0 00E0              ldi R16,<_adcbuffer
+ 0AF2 10E0              ldi R17,>_adcbuffer
+ 0AF4 0E940000          xcall _Float2Str
+ 0AF8                   .dbline 233
+ 0AF8           ;       glcd_text57(96,24,adcbuffer,1,1);
+ 0AF8 81E0              ldi R24,1
+ 0AFA 8C83              std y+4,R24
+ 0AFC 8A83              std y+2,R24
+ 0AFE 80E0              ldi R24,<_adcbuffer
+ 0B00 90E0              ldi R25,>_adcbuffer
+ 0B02 9983              std y+1,R25
+ 0B04 8883              std y+0,R24
+ 0B06 28E1              ldi R18,24
+ 0B08 00E6              ldi R16,96
+ 0B0A 0E940000          xcall _glcd_text57
+ 0B0E                   .dbline 236
+ 0B0E           ;       //终止电压end
+ 0B0E           ;       //内阻
+ 0B0E           ;       Float2Str(adcbuffer,res,1,3);
+ 0B0E 83E0              ldi R24,3
+ 0B10 8C83              std y+4,R24
+ 0B12 81E0              ldi R24,1
+ 0B14 8A83              std y+2,R24
+ 0B16 40908D00          lds R4,_res+2
+ 0B1A 50908E00          lds R5,_res+2+1
+ 0B1E 20908B00          lds R2,_res
+ 0B22 30908C00          lds R3,_res+1
+ 0B26 4882              std y+0,R4
+ 0B28 5982              std y+1,R5
+ 0B2A 9101              movw R18,R2
+ 0B2C 00E0              ldi R16,<_adcbuffer
+ 0B2E 10E0              ldi R17,>_adcbuffer
+ 0B30 0E940000          xcall _Float2Str
+ 0B34                   .dbline 237
+ 0B34           ;       glcd_text57(2,18,adcbuffer,2,1);
+ 0B34 81E0              ldi R24,1
+ 0B36 8C83              std y+4,R24
+ 0B38 82E0              ldi R24,2
+ 0B3A 8A83              std y+2,R24
+ 0B3C 80E0              ldi R24,<_adcbuffer
+ 0B3E 90E0              ldi R25,>_adcbuffer
+ 0B40 9983              std y+1,R25
+ 0B42 8883              std y+0,R24
+ 0B44 22E1              ldi R18,18
+ 0B46 02E0              ldi R16,2
+ 0B48 0E940000          xcall _glcd_text57
+ 0B4C                   .dbline 238
+ 0B4C           ;       glcd_text57(60,23,"R",1,1);
+ 0B4C 81E0              ldi R24,1
+ 0B4E 8C83              std y+4,R24
+ 0B50 8A83              std y+2,R24
+ 0B52 80E0              ldi R24,<L53
+ 0B54 90E0              ldi R25,>L53
+ 0B56 9983              std y+1,R25
+ 0B58 8883              std y+0,R24
+ 0B5A 27E1              ldi R18,23
+ 0B5C 0CE3              ldi R16,60
+ 0B5E 0E940000          xcall _glcd_text57
+ 0B62                   .dbline 241
+ 0B62           ;       //内阻end
+ 0B62           ;       //容量
+ 0B62           ;       Float2Str(adcbuffer,cap/3600.0,5,1);
+ 0B62 81E0              ldi R24,1
+ 0B64 8C83              std y+4,R24
+ 0B66 85E0              ldi R24,5
+ 0B68 8A83              std y+2,R24
+ 0B6A 40908900          lds R4,_cap+2
+ 0B6E 50908A00          lds R5,_cap+2+1
+ 0B72 20908700          lds R2,_cap
+ 0B76 30908800          lds R3,_cap+1
+ 0B7A 5A92              st -y,R5
+ 0B7C 4A92              st -y,R4
+ 0B7E 3A92              st -y,R3
+ 0B80 2A92              st -y,R2
+ 0B82 00E0              ldi R16,<L54
+ 0B84 10E0              ldi R17,>L54
+ 0B86 0E940000          xcall lpm32
+ 0B8A 3A93              st -y,R19
+ 0B8C 2A93              st -y,R18
+ 0B8E 1A93              st -y,R17
+ 0B90 0A93              st -y,R16
+ 0B92 0E940000          xcall div32f
+ 0B96 2883              std y+0,R18
+ 0B98 3983              std y+1,R19
+ 0B9A 9801              movw R18,R16
+ 0B9C 00E0              ldi R16,<_adcbuffer
+ 0B9E 10E0              ldi R17,>_adcbuffer
+ 0BA0 0E940000          xcall _Float2Str
+ 0BA4                   .dbline 242
+ 0BA4           ;       glcd_text57(2,34,adcbuffer,2,1);
+ 0BA4 81E0              ldi R24,1
+ 0BA6 8C83              std y+4,R24
+ 0BA8 82E0              ldi R24,2
+ 0BAA 8A83              std y+2,R24
+ 0BAC 80E0              ldi R24,<_adcbuffer
+ 0BAE 90E0              ldi R25,>_adcbuffer
+ 0BB0 9983              std y+1,R25
+ 0BB2 8883              std y+0,R24
+ 0BB4 22E2              ldi R18,34
+ 0BB6 02E0              ldi R16,2
+ 0BB8 0E940000          xcall _glcd_text57
+ 0BBC                   .dbline 243
+ 0BBC           ;       glcd_text57(80,39,"mAh",1,1);
+ 0BBC 81E0              ldi R24,1
+ 0BBE 8C83              std y+4,R24
+ 0BC0 8A83              std y+2,R24
+ 0BC2 80E0              ldi R24,<L55
+ 0BC4 90E0              ldi R25,>L55
+ 0BC6 9983              std y+1,R25
+ 0BC8 8883              std y+0,R24
+ 0BCA 27E2              ldi R18,39
+ 0BCC 00E5              ldi R16,80
+ 0BCE 0E940000          xcall _glcd_text57
+ 0BD2                   .dbline 244
+ 0BD2           ;       Float2Str(adcbuffer,pcap/3600.0,5,1);
+ 0BD2 81E0              ldi R24,1
+ 0BD4 8C83              std y+4,R24
+ 0BD6 85E0              ldi R24,5
+ 0BD8 8A83              std y+2,R24
+ 0BDA 40908500          lds R4,_pcap+2
+ 0BDE 50908600          lds R5,_pcap+2+1
+ 0BE2 20908300          lds R2,_pcap
+ 0BE6 30908400          lds R3,_pcap+1
+ 0BEA 5A92              st -y,R5
+ 0BEC 4A92              st -y,R4
+ 0BEE 3A92              st -y,R3
+ 0BF0 2A92              st -y,R2
+ 0BF2 00E0              ldi R16,<L54
+ 0BF4 10E0              ldi R17,>L54
+ 0BF6 0E940000          xcall lpm32
+ 0BFA 3A93              st -y,R19
+ 0BFC 2A93              st -y,R18
+ 0BFE 1A93              st -y,R17
+ 0C00 0A93              st -y,R16
+ 0C02 0E940000          xcall div32f
+ 0C06 2883              std y+0,R18
+ 0C08 3983              std y+1,R19
+ 0C0A 9801              movw R18,R16
+ 0C0C 00E0              ldi R16,<_adcbuffer
+ 0C0E 10E0              ldi R17,>_adcbuffer
+ 0C10 0E940000          xcall _Float2Str
+ 0C14                   .dbline 245
+ 0C14           ;       glcd_text57(2,52,adcbuffer,1,1);
+ 0C14 81E0              ldi R24,1
+ 0C16 8C83              std y+4,R24
+ 0C18 8A83              std y+2,R24
+ 0C1A 80E0              ldi R24,<_adcbuffer
+ 0C1C 90E0              ldi R25,>_adcbuffer
+ 0C1E 9983              std y+1,R25
+ 0C20 8883              std y+0,R24
+ 0C22 24E3              ldi R18,52
+ 0C24 02E0              ldi R16,2
+ 0C26 0E940000          xcall _glcd_text57
+ 0C2A                   .dbline 246
+ 0C2A           ;       glcd_text57(80,52,"mWh",1,1);
+ 0C2A 81E0              ldi R24,1
+ 0C2C 8C83              std y+4,R24
+ 0C2E 8A83              std y+2,R24
+ 0C30 80E0              ldi R24,<L56
+ 0C32 90E0              ldi R25,>L56
+ 0C34 9983              std y+1,R25
+ 0C36 8883              std y+0,R24
+ 0C38 24E3              ldi R18,52
+ 0C3A 00E5              ldi R16,80
+ 0C3C 0E940000          xcall _glcd_text57
+ 0C40                   .dbline 248
+ 0C40 2224              clr R2
+ 0C42 3324              clr R3
+ 0C44 30920100          sts _i+1,R3
+ 0C48 20920000          sts _i,R2
+ 0C4C 18C0              xjmp L66
+ 0C4E           L63:
+ 0C4E                   .dbline 248
+ 0C4E                   .dbline 249
+ 0C4E 81E0              ldi R24,1
+ 0C50 8883              std y+0,R24
+ 0C52 80E0              ldi R24,<_adccurv
+ 0C54 90E0              ldi R25,>_adccurv
+ 0C56 E0910000          lds R30,_i
+ 0C5A F0910100          lds R31,_i+1
+ 0C5E E80F              add R30,R24
+ 0C60 F91F              adc R31,R25
+ 0C62 2081              ldd R18,z+0
+ 0C64 00910000          lds R16,_i
+ 0C68 0E940000          xcall _glcd_pixel
+ 0C6C                   .dbline 250
+ 0C6C           L64:
+ 0C6C                   .dbline 248
+ 0C6C 80910000          lds R24,_i
+ 0C70 90910100          lds R25,_i+1
+ 0C74 0196              adiw R24,1
+ 0C76 90930100          sts _i+1,R25
+ 0C7A 80930000          sts _i,R24
+ 0C7E           L66:
+ 0C7E                   .dbline 248
+ 0C7E 20900200          lds R2,_adccurvcount
+ 0C82 3324              clr R3
+ 0C84 40900000          lds R4,_i
+ 0C88 50900100          lds R5,_i+1
+ 0C8C 4214              cp R4,R2
+ 0C8E 5304              cpc R5,R3
+ 0C90 F0F2              brlo L63
+ 0C92                   .dbline 252
+ 0C92 0E940000          xcall _glcd_update
+ 0C96                   .dbline 253
+ 0C96 2224              clr R2
+ 0C98 3324              clr R3
+ 0C9A 3092A300          sts _count+1,R3
+ 0C9E 2092A200          sts _count,R2
+ 0CA2                   .dbline 255
+ 0CA2           L31:
+ 0CA2                   .dbline -2
+ 0CA2           L10:
+ 0CA2 2996              adiw R28,9
+ 0CA4 0E940000          xcall pop_lset
+ 0CA8                   .dbline 0 ; func end
+ 0CA8 1895              reti
+ 0CAA                   .dbend
+ 0CAA                   .dbfunc e init_devices _init_devices fV
+                        .even
+ 0CAA           _init_devices::
+ 0CAA                   .dbline -1
+ 0CAA                   .dbline 261
+ 0CAA           ;       //容量end
+ 0CAA           ;       for(i=0;i<adccurvcount;i++){
+ 0CAA           ;         glcd_pixel(i,adccurv[i],1);
+ 0CAA           ;       }
+ 0CAA           ;       //glcd_line(1,1,64,63,1);
+ 0CAA           ;       glcd_update();
+ 0CAA           ;       count=0;
+ 0CAA           ;               
+ 0CAA           ;   }
+ 0CAA           ;   
+ 0CAA           ; }
+ 0CAA           ; 
+ 0CAA           ; //call this routine to initialise all peripherals
+ 0CAA           ; void init_devices(void)
+ 0CAA           ; {
+ 0CAA                   .dbline 263
+ 0CAA           ;       //stop errant interrupts until set up
+ 0CAA           ;       CLI(); //disable all interrupts
+ 0CAA F894              cli
+ 0CAC                   .dbline 264
+ 0CAC           ;       port_init();
+ 0CAC A9D9              xcall _port_init
+ 0CAE                   .dbline 266
+ 0CAE           ;     
+ 0CAE           ;       MCUCR |= 1<<ISC11;
+ 0CAE 85B7              in R24,0x35
+ 0CB0 8860              ori R24,8
+ 0CB2 85BF              out 0x35,R24
+ 0CB4                   .dbline 267
+ 0CB4           ;       MCUCR &= ~(1<<ISC10); //外部中断1为下降沿触发，用于旋转编码器
+ 0CB4 85B7              in R24,0x35
+ 0CB6 8B7F              andi R24,251
+ 0CB8 85BF              out 0x35,R24
+ 0CBA                   .dbline 268
+ 0CBA           ;       MCUCR |= 1<<ISC01;
+ 0CBA 85B7              in R24,0x35
+ 0CBC 8260              ori R24,2
+ 0CBE 85BF              out 0x35,R24
+ 0CC0                   .dbline 269
+ 0CC0           ;       MCUCR &= ~(1<<ISC00);//外部中断0为下降沿触发，用于旋转编码器开关
+ 0CC0 85B7              in R24,0x35
+ 0CC2 8E7F              andi R24,254
+ 0CC4 85BF              out 0x35,R24
+ 0CC6                   .dbline 271
+ 0CC6           ;       
+ 0CC6           ;       GICR  = 0b11000000;//外部中断使能1，0
+ 0CC6 80EC              ldi R24,192
+ 0CC8 8BBF              out 0x3b,R24
+ 0CCA                   .dbline 272
+ 0CCA           ;       SFIOR&=~BIT(PUD);//使能上拉电阻
+ 0CCA 80B7              in R24,0x30
+ 0CCC 8B7F              andi R24,251
+ 0CCE 80BF              out 0x30,R24
+ 0CD0                   .dbline 273
+ 0CD0           ;       TIMSK = 0x01; //timer interrupt sources,enable timer0
+ 0CD0 81E0              ldi R24,1
+ 0CD2 89BF              out 0x39,R24
+ 0CD4                   .dbline 274
+ 0CD4           ;       timer0_init();
+ 0CD4 E6D9              xcall _timer0_init
+ 0CD6                   .dbline 275
+ 0CD6           ;       ADInit();
+ 0CD6 ECD9              xcall _ADInit
+ 0CD8                   .dbline 276
+ 0CD8           ;       SEI(); //re-enable interrupts
+ 0CD8 7894              sei
+ 0CDA                   .dbline 278
+ 0CDA           ;       //all peripherals are now initialised
+ 0CDA           ;       rotate_key=0;
+ 0CDA 2224              clr R2
+ 0CDC 20920500          sts _rotate_key,R2
+ 0CE0                   .dbline 279
+ 0CE0           ;       hour=0;
+ 0CE0 20929300          sts _hour,R2
+ 0CE4                   .dbline 280
+ 0CE4           ;       minute=0;
+ 0CE4 20929200          sts _minute,R2
+ 0CE8                   .dbline 281
+ 0CE8           ;       second=0;
+ 0CE8 20929100          sts _second,R2
+ 0CEC                   .dbline 282
+ 0CEC           ;       secondcount=0;
+ 0CEC 3324              clr R3
+ 0CEE 30929000          sts _secondcount+1,R3
+ 0CF2 20928F00          sts _secondcount,R2
+ 0CF6                   .dbline 288
+ 0CF6           ;       
+ 0CF6           ;       //tempunsignedchar=EEPROMread(1);
+ 0CF6           ;       //stopvalue=(unsigned int)tempunsignedchar;
+ 0CF6           ;       //tempunsignedchar=EEPROMread(2);
+ 0CF6           ;       //stopvalue=stopvalue+(unsigned int)tempunsignedchar*256;
+ 0CF6           ;       stopvalue=512;
+ 0CF6 80E0              ldi R24,512
+ 0CF8 92E0              ldi R25,2
+ 0CFA 90930900          sts _stopvalue+1,R25
+ 0CFE 80930800          sts _stopvalue,R24
+ 0D02                   .dbline 289
+ 0D02           ;       adcnoloadvalue=adcloadvalue=0;
+ 0D02 30920300          sts _adcloadvalue+1,R3
+ 0D06 20920200          sts _adcloadvalue,R2
+ 0D0A 30920100          sts _adcnoloadvalue+1,R3
+ 0D0E 20920000          sts _adcnoloadvalue,R2
+ 0D12                   .dbline 290
+ 0D12           ;     firststart=0;
+ 0D12 20920400          sts _firststart,R2
+ 0D16                   .dbline 292
+ 0D16           ;       
+ 0D16           ;       cap=0.0;
+ 0D16 00E0              ldi R16,<L40
+ 0D18 10E0              ldi R17,>L40
+ 0D1A 0E940000          xcall lpm32
+ 0D1E 10938800          sts _cap+1,R17
+ 0D22 00938700          sts _cap,R16
+ 0D26 30938A00          sts _cap+2+1,R19
+ 0D2A 20938900          sts _cap+2,R18
+ 0D2E                   .dbline 293
+ 0D2E           ;       pcap=0.0;
+ 0D2E 00E0              ldi R16,<L40
+ 0D30 10E0              ldi R17,>L40
+ 0D32 0E940000          xcall lpm32
+ 0D36 10938400          sts _pcap+1,R17
+ 0D3A 00938300          sts _pcap,R16
+ 0D3E 30938600          sts _pcap+2+1,R19
+ 0D42 20938500          sts _pcap+2,R18
+ 0D46                   .dbline 295
+ 0D46 2224              clr R2
+ 0D48 3324              clr R3
+ 0D4A 30920100          sts _i+1,R3
+ 0D4E 20920000          sts _i,R2
+ 0D52 13C0              xjmp L71
+ 0D54           L68:
+ 0D54                   .dbline 295
+ 0D54 80E0              ldi R24,<_adccurv
+ 0D56 90E0              ldi R25,>_adccurv
+ 0D58 E0910000          lds R30,_i
+ 0D5C F0910100          lds R31,_i+1
+ 0D60 E80F              add R30,R24
+ 0D62 F91F              adc R31,R25
+ 0D64 2224              clr R2
+ 0D66 2082              std z+0,R2
+ 0D68           L69:
+ 0D68                   .dbline 295
+ 0D68 80910000          lds R24,_i
+ 0D6C 90910100          lds R25,_i+1
+ 0D70 0196              adiw R24,1
+ 0D72 90930100          sts _i+1,R25
+ 0D76 80930000          sts _i,R24
+ 0D7A           L71:
+ 0D7A                   .dbline 295
+ 0D7A           ;       
+ 0D7A           ;       for(i=0;i<128;i++)adccurv[i]=0;
+ 0D7A 80910000          lds R24,_i
+ 0D7E 90910100          lds R25,_i+1
+ 0D82 8038              cpi R24,128
+ 0D84 E0E0              ldi R30,0
+ 0D86 9E07              cpc R25,R30
+ 0D88 28F3              brlo L68
+ 0D8A                   .dbline 296
+ 0D8A           ;       adccurvcount=0;
+ 0D8A 2224              clr R2
+ 0D8C 20920200          sts _adccurvcount,R2
+ 0D90                   .dbline -2
+ 0D90           L67:
+ 0D90                   .dbline 0 ; func end
+ 0D90 0895              ret
+ 0D92                   .dbend
+ 0D92                   .dbfunc e main _main fV
+                        .even
+ 0D92           _main::
+ 0D92                   .dbline -1
+ 0D92                   .dbline 300
+ 0D92           ; }
+ 0D92           ; 
+ 0D92           ; void main(void)
+ 0D92           ; {
+ 0D92                   .dbline 301
+ 0D92           ;       init_devices();
+ 0D92 8BDF              xcall _init_devices
+ 0D94                   .dbline 303
+ 0D94           ;       
+ 0D94           ;       glcd_init();
+ 0D94 0E940000          xcall _glcd_init
+ 0D98                   .dbline 304
+ 0D98           ;       glcd_update();
+ 0D98 0E940000          xcall _glcd_update
+ 0D9C           L73:
+ 0D9C                   .dbline 310
+ 0D9C                   .dbline 311
+ 0D9C                   .dbline 312
+ 0D9C           L74:
+ 0D9C                   .dbline 309
+ 0D9C FFCF              xjmp L73
+ 0D9E           X5:
+ 0D9E                   .dbline -2
+ 0D9E           L72:
+ 0D9E                   .dbline 0 ; func end
+ 0D9E 0895              ret
+ 0DA0                   .dbend
+                        .area bss(ram, con, rel)
+ 0000                   .dbfile E:\avr\iccavrproject\电池容量测试\main.c
+ 0000           _i::
+ 0000                   .blkb 2
+ 0002                   .dbsym e i _i i
+ 0002           _adccurvcount::
+ 0002                   .blkb 1
+ 0003                   .dbsym e adccurvcount _adccurvcount c
+ 0003           _adccurv::
+ 0003                   .blkb 128
+ 0083                   .dbsym e adccurv _adccurv A[128:128]c
+ 0083           _pcap::
+ 0083                   .blkb 4
+ 0087                   .dbsym e pcap _pcap D
+ 0087           _cap::
+ 0087                   .blkb 4
+ 008B                   .dbsym e cap _cap D
+ 008B           _res::
+ 008B                   .blkb 4
+ 008F                   .dbsym e res _res D
+ 008F           _secondcount::
+ 008F                   .blkb 2
+ 0091                   .dbsym e secondcount _secondcount i
+ 0091           _second::
+ 0091                   .blkb 1
+ 0092                   .dbsym e second _second c
+ 0092           _minute::
+ 0092                   .blkb 1
+ 0093                   .dbsym e minute _minute c
+ 0093           _hour::
+ 0093                   .blkb 1
+ 0094                   .dbsym e hour _hour c
+ 0094           _adcbuffer::
+ 0094                   .blkb 8
+ 009C                   .dbsym e adcbuffer _adcbuffer A[8:8]c
+ 009C           _adcfloat::
+ 009C                   .blkb 4
+ 00A0                   .dbsym e adcfloat _adcfloat D
+ 00A0           _adc::
+ 00A0                   .blkb 2
+ 00A2                   .dbsym e adc _adc I
+ 00A2           _count::
+ 00A2                   .blkb 2
+ 00A4                   .dbsym e count _count I
+                        .area data(ram, con, rel)
+ 000C                   .dbfile E:\avr\iccavrproject\电池容量测试\main.c
+ 000C           L56:
+ 000C                   .blkb 4
+                        .area idata
+ 000C 6D576800          .byte 'm,'W,'h,0
+                        .area data(ram, con, rel)
+ 0010                   .dbfile E:\avr\iccavrproject\电池容量测试\main.c
+ 0010           L55:
+ 0010                   .blkb 4
+                        .area idata
+ 0010 6D416800          .byte 'm,'A,'h,0
+                        .area data(ram, con, rel)
+ 0014                   .dbfile E:\avr\iccavrproject\电池容量测试\main.c
+                        .area lit(rom, con, rel)
+ 0000           L54:
+ 0000 00006145          .word 0x0,0x4561
+                        .area data(ram, con, rel)
+ 0014                   .dbfile E:\avr\iccavrproject\电池容量测试\main.c
+ 0014           L53:
+ 0014                   .blkb 2
+                        .area idata
+ 0014 5200              .byte 'R,0
+                        .area data(ram, con, rel)
+ 0016                   .dbfile E:\avr\iccavrproject\电池容量测试\main.c
+ 0016           L52:
+ 0016                   .blkb 2
+                        .area idata
+ 0016 3A00              .byte 58,0
+                        .area data(ram, con, rel)
+ 0018                   .dbfile E:\avr\iccavrproject\电池容量测试\main.c
+ 0018           L51:
+ 0018                   .blkb 6
+                        .area idata
+ 0018 737461727400      .byte 's,'t,'a,'r,'t,0
+                        .area data(ram, con, rel)
+ 001E                   .dbfile E:\avr\iccavrproject\电池容量测试\main.c
+ 001E           L50:
+ 001E                   .blkb 5
+                        .area idata
+ 001E 73746F7000        .byte 's,'t,'o,'p,0
+                        .area data(ram, con, rel)
+ 0023                   .dbfile E:\avr\iccavrproject\电池容量测试\main.c
+                        .area lit(rom, con, rel)
+ 0004           L47:
+ 0004 00000040          .word 0x0,0x4000
+ 0008           L40:
+ 0008 00000000          .word 0x0,0x0
+ 000C           L30:
+ 000C 00002041          .word 0x0,0x4120
+ 0010           L29:
+ 0010 0000C842          .word 0x0,0x42c8
+ 0014           L28:
+ 0014 9A99D940          .word 0x999a,0x40d9
+ 0018           L27:
+ 0018 00008044          .word 0x0,0x4480
+ 001C           L26:
+ 001C 00000040          .word 0x0,0x4000
+ 0020           L25:
+ 0020 00000040          .word 0x0,0x4000
+ 0024           L24:
+ 0024 0AD72340          .word 0xd70a,0x4023
+ 0028           L23:
+ 0028 00007A44          .word 0x0,0x447a

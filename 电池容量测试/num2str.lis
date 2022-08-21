@@ -1,0 +1,461 @@
+                        .module num2str.c
+                        .area text(rom, con, rel)
+ 0000                   .dbfile E:\avr\iccavrproject\µç³ØÈÝÁ¿²âÊÔ\num2str.c
+ 0000                   .dbfunc e Num2Str _Num2Str fV
+ 0000           ;              i -> R20
+ 0000           ;            len -> R22
+ 0000           ;            Num -> R10,R11
+ 0000           ;            str -> R12,R13
+                        .even
+ 0000           _Num2Str::
+ 0000 0E940000          xcall push_gset4
+ 0004 5901              movw R10,R18
+ 0006 6801              movw R12,R16
+ 0008 6885              ldd R22,y+8
+ 000A                   .dbline -1
+ 000A                   .dbline 4
+ 000A           ; #include "num2str.h"
+ 000A           ; 
+ 000A           ; void Num2Str(unsigned char str[],int Num,unsigned char len)
+ 000A           ; {
+ 000A                   .dbline 5
+ 000A           ;    unsigned char i=0;
+ 000A 4427              clr R20
+ 000C 13C0              xjmp L3
+ 000E           L2:
+ 000E                   .dbline 6
+ 000E                   .dbline 7
+ 000E 2AE0              ldi R18,10
+ 0010 30E0              ldi R19,0
+ 0012 8501              movw R16,R10
+ 0014 0E940000          xcall mod16s
+ 0018 C801              movw R24,R16
+ 001A C096              adiw R24,48
+ 001C E62F              mov R30,R22
+ 001E FF27              clr R31
+ 0020 EC0D              add R30,R12
+ 0022 FD1D              adc R31,R13
+ 0024 8083              std z+0,R24
+ 0026                   .dbline 8
+ 0026 2AE0              ldi R18,10
+ 0028 30E0              ldi R19,0
+ 002A 8501              movw R16,R10
+ 002C 0E940000          xcall div16s
+ 0030 5801              movw R10,R16
+ 0032                   .dbline 9
+ 0032 4395              inc R20
+ 0034                   .dbline 10
+ 0034           L3:
+ 0034                   .dbline 6
+ 0034           ;    while(len--){
+ 0034 262E              mov R2,R22
+ 0036 3324              clr R3
+ 0038 6150              subi R22,1
+ 003A 2220              tst R2
+ 003C 41F7              brne L2
+ 003E                   .dbline 11
+ 003E           ;      str[len]=Num%10+0x30;
+ 003E           ;      Num=Num/10;
+ 003E           ;      i++;
+ 003E           ;    }
+ 003E           ;    str[i++]='\0';
+ 003E 242E              mov R2,R20
+ 0040 3324              clr R3
+ 0042 4F5F              subi R20,255    ; addi 1
+ 0044 E22D              mov R30,R2
+ 0046 FF27              clr R31
+ 0048 EC0D              add R30,R12
+ 004A FD1D              adc R31,R13
+ 004C 2224              clr R2
+ 004E 2082              std z+0,R2
+ 0050                   .dbline -2
+ 0050           L1:
+ 0050 0E940000          xcall pop_gset4
+ 0054                   .dbline 0 ; func end
+ 0054 0895              ret
+ 0056                   .dbsym r i 20 c
+ 0056                   .dbsym r len 22 c
+ 0056                   .dbsym r Num 10 I
+ 0056                   .dbsym r str 12 pc
+ 0056                   .dbend
+ 0056                   .dbfunc e num_pow _num_pow fi
+ 0056           ;         result -> R20,R21
+ 0056           ;              n -> R22
+ 0056           ;              m -> R10
+                        .even
+ 0056           _num_pow::
+ 0056 0E940000          xcall push_gset3
+ 005A 622F              mov R22,R18
+ 005C A02E              mov R10,R16
+ 005E                   .dbline -1
+ 005E                   .dbline 15
+ 005E           ; }
+ 005E           ; 
+ 005E           ; unsigned int num_pow(unsigned char m,unsigned char n)
+ 005E           ; {
+ 005E                   .dbline 16
+ 005E           ;   unsigned int result=1;
+ 005E 41E0              ldi R20,1
+ 0060 50E0              ldi R21,0
+ 0062 06C0              xjmp L7
+ 0064           L6:
+ 0064                   .dbline 17
+ 0064 2A2D              mov R18,R10
+ 0066 3327              clr R19
+ 0068 8A01              movw R16,R20
+ 006A 0E940000          xcall empy16s
+ 006E A801              movw R20,R16
+ 0070           L7:
+ 0070                   .dbline 17
+ 0070           ;   while(n--)result*=m;
+ 0070 262E              mov R2,R22
+ 0072 3324              clr R3
+ 0074 6150              subi R22,1
+ 0076 2220              tst R2
+ 0078 A9F7              brne L6
+ 007A                   .dbline 18
+ 007A           ;   return result;
+ 007A 8A01              movw R16,R20
+ 007C                   .dbline -2
+ 007C           L5:
+ 007C 0E940000          xcall pop_gset3
+ 0080                   .dbline 0 ; func end
+ 0080 0895              ret
+ 0082                   .dbsym r result 20 i
+ 0082                   .dbsym r n 22 c
+ 0082                   .dbsym r m 10 c
+ 0082                   .dbend
+ 0082                   .dbfunc e Float2Str _Float2Str fV
+ 0082           ;              j -> R20
+ 0082           ;              i -> R22
+ 0082           ;        xiaoshu -> R10,R11
+ 0082           ;       zhengshu -> R12,R13
+ 0082           ;           len2 -> R8
+ 0082           ;           len1 -> y+20
+ 0082           ;           floa -> y+16
+ 0082           ;            str -> y+14
+                        .even
+ 0082           _Float2Str::
+ 0082 0E940000          xcall push_arg4
+ 0086 0E940000          xcall push_gset5
+ 008A 2497              sbiw R28,4
+ 008C 8E88              ldd R8,y+22
+ 008E                   .dbline -1
+ 008E                   .dbline 22
+ 008E           ; }
+ 008E           ; 
+ 008E           ; void Float2Str(unsigned char str[],float floa,unsigned char len1,unsigned char len2)
+ 008E           ; {
+ 008E                   .dbline 23
+ 008E           ;    unsigned char i=0,j=0;
+ 008E 6627              clr R22
+ 0090                   .dbline 23
+ 0090 4427              clr R20
+ 0092                   .dbline 24
+ 0092           ;    unsigned int zhengshu=floa;
+ 0092 FE01              movw R30,R28
+ 0094 2088              ldd R2,z+16
+ 0096 3188              ldd R3,z+17
+ 0098 4288              ldd R4,z+18
+ 009A 5388              ldd R5,z+19
+ 009C 5A92              st -y,R5
+ 009E 4A92              st -y,R4
+ 00A0 3A92              st -y,R3
+ 00A2 2A92              st -y,R2
+ 00A4 00E0              ldi R16,<L12
+ 00A6 10E0              ldi R17,>L12
+ 00A8 0E940000          xcall lpm32
+ 00AC 3A93              st -y,R19
+ 00AE 2A93              st -y,R18
+ 00B0 1A93              st -y,R17
+ 00B2 0A93              st -y,R16
+ 00B4 0E940000          xcall cmp32f
+ 00B8 D4F0              brlt L10
+ 00BA FE01              movw R30,R28
+ 00BC 2088              ldd R2,z+16
+ 00BE 3188              ldd R3,z+17
+ 00C0 4288              ldd R4,z+18
+ 00C2 5388              ldd R5,z+19
+ 00C4 5A92              st -y,R5
+ 00C6 4A92              st -y,R4
+ 00C8 3A92              st -y,R3
+ 00CA 2A92              st -y,R2
+ 00CC 00E0              ldi R16,<L12
+ 00CE 10E0              ldi R17,>L12
+ 00D0 0E940000          xcall lpm32
+ 00D4 3A93              st -y,R19
+ 00D6 2A93              st -y,R18
+ 00D8 1A93              st -y,R17
+ 00DA 0A93              st -y,R16
+ 00DC 0E940000          xcall sub32f
+ 00E0 0E940000          xcall fp2int
+ 00E4 C801              movw R24,R16
+ 00E6 8050              subi R24,0  ; offset = 32768
+ 00E8 9048              sbci R25,128
+ 00EA 5C01              movw R10,R24
+ 00EC 08C0              xjmp L11
+ 00EE           L10:
+ 00EE FE01              movw R30,R28
+ 00F0 0089              ldd R16,z+16
+ 00F2 1189              ldd R17,z+17
+ 00F4 2289              ldd R18,z+18
+ 00F6 3389              ldd R19,z+19
+ 00F8 0E940000          xcall fp2int
+ 00FC 5801              movw R10,R16
+ 00FE           L11:
+ 00FE 6501              movw R12,R10
+ 0100                   .dbline 25
+ 0100           ;    unsigned int xiaoshu=(floa-zhengshu)*num_pow(10,len2);
+ 0100 282D              mov R18,R8
+ 0102 0AE0              ldi R16,10
+ 0104 2F93              push R18
+ 0106 A7DF              xcall _num_pow
+ 0108 8F90              pop R8
+ 010A 1801              movw R2,R16
+ 010C FE01              movw R30,R28
+ 010E 4088              ldd R4,z+16
+ 0110 5188              ldd R5,z+17
+ 0112 6288              ldd R6,z+18
+ 0114 7388              ldd R7,z+19
+ 0116 7A92              st -y,R7
+ 0118 6A92              st -y,R6
+ 011A 5A92              st -y,R5
+ 011C 4A92              st -y,R4
+ 011E 00E0              ldi R16,<L15
+ 0120 10E0              ldi R17,>L15
+ 0122 0E940000          xcall lpm32
+ 0126 3A93              st -y,R19
+ 0128 2A93              st -y,R18
+ 012A 1A93              st -y,R17
+ 012C 0A93              st -y,R16
+ 012E 8601              movw R16,R12
+ 0130 1695              lsr R17
+ 0132 0795              ror R16
+ 0134 0E940000          xcall int2fp
+ 0138 3A93              st -y,R19
+ 013A 2A93              st -y,R18
+ 013C 1A93              st -y,R17
+ 013E 0A93              st -y,R16
+ 0140 0E940000          xcall empy32fs
+ 0144 8601              movw R16,R12
+ 0146 0170              andi R16,1
+ 0148 1070              andi R17,0
+ 014A 0E940000          xcall int2fp
+ 014E 3A93              st -y,R19
+ 0150 2A93              st -y,R18
+ 0152 1A93              st -y,R17
+ 0154 0A93              st -y,R16
+ 0156 0E940000          xcall add32fs
+ 015A 0E940000          xcall sub32fs
+ 015E 00E0              ldi R16,<L15
+ 0160 10E0              ldi R17,>L15
+ 0162 0E940000          xcall lpm32
+ 0166 3A93              st -y,R19
+ 0168 2A93              st -y,R18
+ 016A 1A93              st -y,R17
+ 016C 0A93              st -y,R16
+ 016E 8101              movw R16,R2
+ 0170 1695              lsr R17
+ 0172 0795              ror R16
+ 0174 0E940000          xcall int2fp
+ 0178 3A93              st -y,R19
+ 017A 2A93              st -y,R18
+ 017C 1A93              st -y,R17
+ 017E 0A93              st -y,R16
+ 0180 0E940000          xcall empy32fs
+ 0184 8101              movw R16,R2
+ 0186 0170              andi R16,1
+ 0188 1070              andi R17,0
+ 018A 0E940000          xcall int2fp
+ 018E 3A93              st -y,R19
+ 0190 2A93              st -y,R18
+ 0192 1A93              st -y,R17
+ 0194 0A93              st -y,R16
+ 0196 0E940000          xcall add32fs
+ 019A 0E940000          xcall empy32f
+ 019E FE01              movw R30,R28
+ 01A0 0083              std z+0,R16
+ 01A2 1183              std z+1,R17
+ 01A4 2283              std z+2,R18
+ 01A6 3383              std z+3,R19
+ 01A8 FE01              movw R30,R28
+ 01AA 2080              ldd R2,z+0
+ 01AC 3180              ldd R3,z+1
+ 01AE 4280              ldd R4,z+2
+ 01B0 5380              ldd R5,z+3
+ 01B2 5A92              st -y,R5
+ 01B4 4A92              st -y,R4
+ 01B6 3A92              st -y,R3
+ 01B8 2A92              st -y,R2
+ 01BA 00E0              ldi R16,<L12
+ 01BC 10E0              ldi R17,>L12
+ 01BE 0E940000          xcall lpm32
+ 01C2 3A93              st -y,R19
+ 01C4 2A93              st -y,R18
+ 01C6 1A93              st -y,R17
+ 01C8 0A93              st -y,R16
+ 01CA 0E940000          xcall cmp32f
+ 01CE D4F0              brlt L13
+ 01D0 FE01              movw R30,R28
+ 01D2 2080              ldd R2,z+0
+ 01D4 3180              ldd R3,z+1
+ 01D6 4280              ldd R4,z+2
+ 01D8 5380              ldd R5,z+3
+ 01DA 5A92              st -y,R5
+ 01DC 4A92              st -y,R4
+ 01DE 3A92              st -y,R3
+ 01E0 2A92              st -y,R2
+ 01E2 00E0              ldi R16,<L12
+ 01E4 10E0              ldi R17,>L12
+ 01E6 0E940000          xcall lpm32
+ 01EA 3A93              st -y,R19
+ 01EC 2A93              st -y,R18
+ 01EE 1A93              st -y,R17
+ 01F0 0A93              st -y,R16
+ 01F2 0E940000          xcall sub32f
+ 01F6 0E940000          xcall fp2int
+ 01FA C801              movw R24,R16
+ 01FC 8050              subi R24,0  ; offset = 32768
+ 01FE 9048              sbci R25,128
+ 0200 7C01              movw R14,R24
+ 0202 08C0              xjmp L14
+ 0204           L13:
+ 0204 FE01              movw R30,R28
+ 0206 0081              ldd R16,z+0
+ 0208 1181              ldd R17,z+1
+ 020A 2281              ldd R18,z+2
+ 020C 3381              ldd R19,z+3
+ 020E 0E940000          xcall fp2int
+ 0212 7801              movw R14,R16
+ 0214           L14:
+ 0214 5701              movw R10,R14
+ 0216 15C0              xjmp L17
+ 0218           L16:
+ 0218                   .dbline 26
+ 0218                   .dbline 27
+ 0218 2AE0              ldi R18,10
+ 021A 30E0              ldi R19,0
+ 021C 8601              movw R16,R12
+ 021E 0E940000          xcall mod16u
+ 0222 C801              movw R24,R16
+ 0224 C096              adiw R24,48
+ 0226 EC89              ldd R30,y+20
+ 0228 FF27              clr R31
+ 022A 0E84              ldd R0,y+14
+ 022C 1F84              ldd R1,y+15
+ 022E E00D              add R30,R0
+ 0230 F11D              adc R31,R1
+ 0232 8083              std z+0,R24
+ 0234                   .dbline 28
+ 0234 2AE0              ldi R18,10
+ 0236 30E0              ldi R19,0
+ 0238 8601              movw R16,R12
+ 023A 0E940000          xcall div16u
+ 023E 6801              movw R12,R16
+ 0240                   .dbline 29
+ 0240 6395              inc R22
+ 0242                   .dbline 30
+ 0242           L17:
+ 0242                   .dbline 26
+ 0242           ;    while(len1--){
+ 0242 2C88              ldd R2,y+20
+ 0244 3324              clr R3
+ 0246 822D              mov R24,R2
+ 0248 8150              subi R24,1
+ 024A 8C8B              std y+20,R24
+ 024C 2220              tst R2
+ 024E 21F7              brne L16
+ 0250                   .dbline 31
+ 0250           ;      str[len1]=zhengshu%10+0x30;
+ 0250           ;      zhengshu=zhengshu/10;
+ 0250           ;      i++;
+ 0250           ;    }
+ 0250           ;    str[i]='.';
+ 0250 E62F              mov R30,R22
+ 0252 FF27              clr R31
+ 0254 0E84              ldd R0,y+14
+ 0256 1F84              ldd R1,y+15
+ 0258 E00D              add R30,R0
+ 025A F11D              adc R31,R1
+ 025C 8EE2              ldi R24,46
+ 025E 8083              std z+0,R24
+ 0260 19C0              xjmp L20
+ 0262           L19:
+ 0262                   .dbline 33
+ 0262                   .dbline 34
+ 0262 282C              mov R2,R8
+ 0264 3324              clr R3
+ 0266 E62F              mov R30,R22
+ 0268 FF27              clr R31
+ 026A E20D              add R30,R2
+ 026C F31D              adc R31,R3
+ 026E 0E84              ldd R0,y+14
+ 0270 1F84              ldd R1,y+15
+ 0272 E00D              add R30,R0
+ 0274 F11D              adc R31,R1
+ 0276 2AE0              ldi R18,10
+ 0278 30E0              ldi R19,0
+ 027A 8501              movw R16,R10
+ 027C 0E940000          xcall mod16u
+ 0280 C801              movw R24,R16
+ 0282 C096              adiw R24,48
+ 0284 8183              std z+1,R24
+ 0286                   .dbline 35
+ 0286 2AE0              ldi R18,10
+ 0288 30E0              ldi R19,0
+ 028A 8501              movw R16,R10
+ 028C 0E940000          xcall div16u
+ 0290 5801              movw R10,R16
+ 0292                   .dbline 36
+ 0292 4395              inc R20
+ 0294                   .dbline 37
+ 0294           L20:
+ 0294                   .dbline 32
+ 0294           ;    while(len2--)
+ 0294 282C              mov R2,R8
+ 0296 3324              clr R3
+ 0298 822D              mov R24,R2
+ 029A 8150              subi R24,1
+ 029C 882E              mov R8,R24
+ 029E 2220              tst R2
+ 02A0 01F7              brne L19
+ 02A2                   .dbline 38
+ 02A2           ;    {
+ 02A2           ;      str[i+len2+1]=xiaoshu%10+0x30;
+ 02A2           ;      xiaoshu=xiaoshu/10;
+ 02A2           ;      j++;
+ 02A2           ;    }
+ 02A2           ;    str[i+j+1]='\0';
+ 02A2 242E              mov R2,R20
+ 02A4 3324              clr R3
+ 02A6 E62F              mov R30,R22
+ 02A8 FF27              clr R31
+ 02AA E20D              add R30,R2
+ 02AC F31D              adc R31,R3
+ 02AE 0E84              ldd R0,y+14
+ 02B0 1F84              ldd R1,y+15
+ 02B2 E00D              add R30,R0
+ 02B4 F11D              adc R31,R1
+ 02B6 2224              clr R2
+ 02B8 2182              std z+1,R2
+ 02BA                   .dbline -2
+ 02BA           L9:
+ 02BA 2496              adiw R28,4
+ 02BC 0E940000          xcall pop_gset5
+ 02C0 2496              adiw R28,4
+ 02C2                   .dbline 0 ; func end
+ 02C2 0895              ret
+ 02C4                   .dbsym r j 20 c
+ 02C4                   .dbsym r i 22 c
+ 02C4                   .dbsym r xiaoshu 10 i
+ 02C4                   .dbsym r zhengshu 12 i
+ 02C4                   .dbsym r len2 8 c
+ 02C4                   .dbsym l len1 20 c
+ 02C4                   .dbsym l floa 16 D
+ 02C4                   .dbsym l str 14 pc
+ 02C4                   .dbend
+                        .area lit(rom, con, rel)
+ 0000           L15:
+ 0000 00000040          .word 0x0,0x4000
+ 0004           L12:
+ 0004 00000047          .word 0x0,0x4700
